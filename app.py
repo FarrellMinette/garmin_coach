@@ -194,7 +194,7 @@ elif view_mode == "AI Coach Analysis":
                 
                 try:
                     response = client_ai.models.generate_content(
-                        model='gemini-3.8-flash',
+                        model='gemini-3.1-flash-lite',
                         contents=prompt,
                     )
                     st.markdown(response.text)
