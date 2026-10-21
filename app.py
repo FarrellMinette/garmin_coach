@@ -276,10 +276,28 @@ elif view_mode == "Weekly Calendar Log":
             else:
                 st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
                 st.markdown("---")
-                
+
+# --- VIEW 3: MONTHLY CALENDAR GRID ---
 # --- VIEW 3: MONTHLY CALENDAR GRID ---
 elif view_mode == "Monthly Calendar Grid":
     st.subheader("🗓️ Monthly Calendar Grid & Activity Slots")
+    
+    # Inject CSS to make popover buttons borderless and transparent (just the logo)
+    st.markdown("""
+        <style>
+        [data-testid="stPopover"] > button {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 2px 4px !important;
+            font-size: 1.3rem !important;
+        }
+        [data-testid="stPopover"] > button:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
     if df.empty:
         st.warning("No data available.")
@@ -331,14 +349,8 @@ elif view_mode == "Monthly Calendar Grid":
                                 hr = act.get('Avg_HR', 0)
                                 cals = act.get('Calories_kcal', 0)
                                 
-                                # Compact label showing Logo + Distance (or Calories for non-distance)
-                                if dist > 0.1:
-                                    button_label = f"{logo} {dist:.1f}k"
-                                else:
-                                    button_label = f"{logo} {cals:.0f}c"
-                                
-                                # Compact popover button with detailed info on click
-                                with st.popover(button_label):
+                                # Clean popover button displaying ONLY the logo icon with no borders
+                                with st.popover(logo):
                                     st.markdown(f"### {logo} {act_type}")
                                     st.markdown("---")
                                     st.write(f"**Category:** {cat}")
@@ -349,7 +361,7 @@ elif view_mode == "Monthly Calendar Grid":
                         else:
                             st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
             st.markdown("---")
-
+            
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
