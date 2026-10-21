@@ -218,8 +218,19 @@ elif view_mode == "Monthly Calendar Grid":
         st.warning("No data available.")
     else:
         df['Month_Year'] = df['Date'].dt.to_period('M')
-        available_months = sorted(df['Month_Year'].unique(), reverse=True)
-        selected_month = st.selectbox("Select Month", available_months, format_func=lambda x: x.strftime('%B %Y'))
+        
+        # Generate all 12 months in chronological order based on available data range or standard year blocks
+        min_date = df['Date'].min()
+        max_date = df['Date'].max()
+        all_months = pd.period_range(start=pd.Period(min_date, 'M'), end=pd.Period(max_date, 'M'), freq='M')
+        available_months = sorted(all_months, reverse=False) # In order
+        
+        selected_month = st.selectbox(
+            "Select Month", 
+            available_months, 
+            format_func=lambda x: x.strftime('%B %Y'),
+            index=len(available_months)-1 # Default to most recent month
+        )
         
         m_df = df[df['Month_Year'] == selected_month].copy()
         m_df['DayNum'] = m_df['Date'].dt.day
@@ -247,41 +258,107 @@ elif view_mode == "Monthly Calendar Grid":
                         if day in daily_map:
                             for act in daily_map[day]:
                                 cat = act.get('Category', 'Other Activity')
+                                act_type = act.get('Activity Type', cat)
                                 logo = sport_logos.get(cat, '🏅')
                                 dist = act.get('Distance_km', 0)
                                 hr = act.get('Avg_HR', 0)
-                                st.markdown(f"<small>{logo} **{dist:.1f}km**<br>HR: {hr}bpm</small>", unsafe_allow_html=True)
+                                cals = act.get('Calories_kcal', 0)
+                                
+                                # Use Markdown tooltip title for hover popup details
+                                tooltip_text = f"Activity: {act_type} | Distance: {dist:.2f}km | Avg HR: {hr}bpm | Calories: {cals}kcal"
+                                st.markdown(f"<span title='{tooltip_text}' style='cursor:pointer;'>{logo} <b>{act_type}</b><br><small>{dist:.1f}km | {hr}bpm</small></span>", unsafe_allow_html=True)
                         else:
                             st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
             st.markdown("---")
 
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
+elif view_mode == "Weekly Calendar Log":
+    st.subheader("📅 Weekly Calendar Grid View")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        latest_date = df['Date'].max()
+        week_start = latest_date - timedelta(days=6)
+        week_days = pd.date_range(start=week_start, end=latest_date)
+        
+        df['DateOnly'] = df['Date'].dt.date
+        
+        st.markdown(f"### Week: {week_start.strftime('%b %d')} — {latest_date.strftime('%b %d, %Y')}")
+        cols = st.columns(7)
+        
+        for i, single_date in enumerate(week_days):
+            d_obj = single_date.date()
+            day_name = single_date.strftime('%a\n%b %d')
+            day_acts = df[df['DateOnly'] == d_obj]
+            
+            with cols[i]:
+                st.markdown(f"**{day_name}**")
+                if not day_acts.empty:
+                    for _, row in day_acts.iterrows():
+                        cat = row.get('Category', 'Other Activity')
+                        act_type = row.get('Activity Type', cat)
+                        logo = sport_logos.get(cat, '🏅')
+                        dist = row.get('Distance_km', 0)
+                        hr = row.get('Avg_HR', 0)
+                        cals = row.get('Calories_kcal', 0)
+                        
+                        tooltip_text = f"Activity: {act_type} | Distance: {dist:.2f}km | Avg HR: {hr}bpm | Calories: {cals}kcal"
+                        st.markdown(f"<div title='{tooltip_text}' style='background:#1f2937; padding:6px; border-radius:6px; margin-bottom:4px; font-size:11px;'>{logo} <b>{act_type}</b><br>📏 {dist:.1f}km<br>❤️ {hr}bpm<br>🔥 {cals}kcal</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='background:#111827; padding:10px; border-radius:6px; color:gray; text-align:center; font-size:11px;'>Rest Day</div>", unsafe_allow_html=True)
+
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
-    st.subheader("🏆 Per-Sport Deterministic Insights")
+    st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
     
     if df.empty:
         st.warning("No data available.")
     else:
         sports = df['Category'].unique()
-        selected_sport = st.selectbox("Select Sport Category", sports)
         
-        sport_df = df[df['Category'] == selected_sport]
+        st.markdown("##### Select Sport Category:")
+        sport_cols = st.columns(len(sports) if len(sports) > 0 else 1)
+        
+        if 'selected_sport_btn' not in st.session_state:
+            st.session_state.selected_sport_btn = sports[0]
+            
+        for idx, sport in enumerate(sports):
+            logo = sport_logos.get(sport, '🏅')
+            if sport_cols[idx].button(f"{logo} {sport}"):
+                st.session_state.selected_sport_btn = sport
+                
+        selected_sport = st.session_state.selected_sport_btn
+        sport_df = df[df['Category'] == selected_sport].sort_values(by='Date', ascending=False)
         logo = sport_logos.get(selected_sport, '🏅')
         
-        st.markdown(f"### {logo} Analytics for: {selected_sport}")
-        sc1, sc2, sc3 = st.columns(3)
+        st.markdown(---)
+        st.markdown(f"### {logo} Deep-Dive Analytics: {selected_sport}")
+        
+        sc1, sc2, sc3, sc4 = st.columns(4)
         sc1.metric("Total Sessions", len(sport_df))
         sc2.metric("Total Distance", f"{sport_df['Distance_km'].sum():.1f} km")
         sc3.metric("Average Session HR", f"{sport_df['Avg_HR'].mean():.1f} bpm")
+        sc4.metric("Total Calories Burned", f"{sport_df['Calories_kcal'].sum():,.0f} kcal")
         
-        st.markdown("#### Key Per-Sport Observations:")
-        max_dist_row = sport_df.loc[sport_df['Distance_km'].idxmax()] if not sport_df.empty else None
-        if max_dist_row is not None:
-            st.info(f"🚀 **Longest {selected_sport} Session:** {max_dist_row['Distance_km']:.2f} km on {pd.to_datetime(max_dist_row['Date']).strftime('%b %d, %Y')} with an average HR of {max_dist_row['Avg_HR']} bpm.")
+        st.markdown("#### 📈 Session Progression & Performance Trends")
+        if not sport_df.empty and sport_df['Distance_km'].sum() > 0:
+            fig_trend = px.line(sport_df, x='Date', y='Distance_km', markers=True, title=f"{selected_sport} Distance Progression Over Time")
+            st.plotly_chart(fig_trend, use_container_width=True)
             
-        max_hr_row = sport_df.loc[sport_df['Avg_HR'].idxmax()] if not sport_df.empty else None
-        if max_hr_row is not None:
-            st.success(f"🔥 **Highest Intensity {selected_sport} Session:** Averaged {max_hr_row['Avg_HR']} bpm on {pd.to_datetime(max_hr_row['Date']).strftime('%b %d, %Y')}.")
+            fig_hr_trend = px.scatter(sport_df, x='Date', y='Avg_HR', color='Calories_kcal', size='Distance_km', title=f"{selected_sport} Heart Rate & Effort Scaling")
+            st.plotly_chart(fig_hr_trend, use_container_width=True)
+        else:
+            st.info("Insufficient distance data for line progression charts in this category.")
+            
+        st.markdown("#### 📋 Complete Activity Log for Selected Sport")
+        st.dataframe(
+            sport_df[['Date', 'Activity Type', 'Distance_km', 'Avg_HR', 'Calories_kcal']].rename(
+                columns={'Distance_km': 'Distance (km)', 'Avg_HR': 'Avg HR (bpm)', 'Calories_kcal': 'Calories'}
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
 
 # --- VIEW 5: AI COACH ANALYSIS ---
 elif view_mode == "AI Coach Analysis":
@@ -306,7 +383,7 @@ elif view_mode == "AI Coach Analysis":
                 
                 try:
                     response = client_ai.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model='gemini-3.8-flash',
                         contents=prompt,
                     )
                     st.markdown(response.text)
