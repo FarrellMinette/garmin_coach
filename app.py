@@ -95,7 +95,7 @@ df['Avg_HR'] = safe_numeric(df.get('averageHR', df.get('Avg HR', 0)))
 
 # --- 4. DASHBOARD UI COMPONENTS ---
 st.sidebar.header("Navigation")
-view_mode = st.sidebar.radio("Select View", ["Metrics Overview", "3-Month Heatmap", "AI Coach Analysis"])
+view_mode = st.sidebar.radio("Select View", ["Metrics Overview", "3-Month Heatmap", "Periodic Summaries", "AI Coach Analysis"])
 
 if view_mode == "Metrics Overview":
     st.subheader("Recent Training Metrics")
@@ -125,11 +125,6 @@ if view_mode == "Metrics Overview":
         title="Activity Heart Rate & Volume Over Time"
     )
     st.plotly_chart(fig, use_container_width=True)
-
-# Add a new selection option to your sidebar radio
-view_mode = st.sidebar.radio("Select View", ["Metrics Overview", "3-Month Heatmap", "Periodic Summaries", "AI Coach Analysis"])
-
-# ... (keep your existing views, then add this new elif block) ...
 
 elif view_mode == "Periodic Summaries":
     st.subheader("Periodic Training Aggregates")
@@ -190,7 +185,7 @@ elif view_mode == "Periodic Summaries":
             
         avg_dist_period = summary_df['Total_Distance_km'].mean()
         st.success(f"📈 **Consistency Baseline:** You average **{avg_dist_period:.1f} km** per {period_tab.split()[0].lower()} tracked.")
-        
+
 elif view_mode == "3-Month Heatmap":
     st.subheader("3-Month Activity Consistency Matrix")
     
