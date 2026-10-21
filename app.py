@@ -184,38 +184,104 @@ if view_mode == "Training Dashboard (Overview & Heatmap)":
     st.pyplot(fig_hm)
 
 # --- VIEW 2: WEEKLY CALENDAR LOG ---
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
 elif view_mode == "Weekly Calendar Log":
-    st.subheader("📅 Weekly Calendar View (Last 7 Days)")
+    st.subheader("📅 Weekly Calendar View (7-Column Grid)")
     
     if df.empty:
         st.warning("No data available.")
     else:
-        latest_date = df['Date'].max()
-        week_start = latest_date - timedelta(days=6)
-        week_days = pd.date_range(start=week_start, end=latest_date)
+        # Group activities by calendar week (Monday start)
+        df_w = df.copy()
+        df_w['Week_Start'] = df_w['Date'] - pd.to_timedelta(df_w['Date'].dt.dayofweek, unit='d')
+        df_w['Week_Start_Obj'] = df_w['Week_Start'].dt.date
         
-        df['DateOnly'] = df['Date'].dt.date
+        unique_weeks = sorted(df_w['Week_Start_Obj'].unique(), reverse=True)
         
-        for single_date in week_days:
-            d_obj = single_date.date()
-            day_name = single_date.strftime('%A, %b %d, %Y')
-            day_acts = df[df['DateOnly'] == d_obj]
+        # Horizontal button row for week selection
+        st.markdown("##### Select Week:")
+        week_cols = st.columns(min(len(unique_weeks), 8))
+        
+        if 'selected_week_btn' not in st.session_state:
+            st.session_state.selected_week_btn = unique_weeks[0] # Default to current/latest week
             
-            with st.container():
+        for idx, w_start in enumerate(unique_weeks[:8]):
+            w_label = w_start.strftime('%b %d')
+            if week_cols[idx].button(f"W: {w_label}", key=f"wk_btn_{w_start}"):
+                st.session_state.selected_week_btn = w_start
+                
+        selected_week_start = st.session_state.selected_week_btn
+        week_df = df_w[df_w['Week_Start_Obj'] == selected_week_start].copy()
+        week_start_dt = pd.to_datetime(selected_week_start)
+        week_days = pd.date_range(start=week_start_dt, periods=7)
+        week_df['DateOnly'] = week_df['Date'].dt.date
+        
+        st.markdown("---")
+        st.markdown(f"### 🗓️ Week of {week_start_dt.strftime('%B %d')} — {(week_start_dt + timedelta(days=6)).strftime('%B %d, %Y')}")
+        
+        # 1 Row x 7 Columns Layout (Mon -> Sun)
+        cols = st.columns(7)
+        weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        
+        for i, single_date in enumerate(week_days):
+            d_obj = single_date.date()
+            day_acts = week_df[week_df['DateOnly'] == d_obj]
+            
+            with cols[i]:
+                # Column Header: Day Name + Date
+                st.markdown(f"**{weekdays[i]}** <small>({single_date.strftime('%b %d')})</small>", unsafe_allow_html=True)
+                
                 if not day_acts.empty:
-                    st.markdown(f"#### 🟢 {day_name} (Active)")
                     for _, row in day_acts.iterrows():
                         cat = row.get('Category', 'Other Activity')
+                        raw_type = row.get('Activity Type', cat)
+                        act_type = clean_activity_name(raw_type)
                         logo = sport_logos.get(cat, '🏅')
-                        col1, col2, col3, col4, col5 = st.columns(5)
-                        col1.markdown(f"**{logo} {row.get('ActivityType', row.get('Activity Type', cat))}**")
-                        col2.metric("Distance", f"{row.get('Distance_km', 0):.2f} km")
-                        col3.metric("Avg HR", f"{row.get('Avg_HR', 0)} bpm")
-                        col4.metric("Calories", f"{row.get('Calories_kcal', 0)} kcal")
-                        col5.metric("Training Load", cat)
+                        dist = row.get('Distance_km', 0)
+                        hr = row.get('Avg_HR', 0)
+                        cals = row.get('Calories_kcal', 0)
+                        
+                        # Structured card with detailed key info
+                        dist_str = f"📏 **{dist:.2f} km**" if dist > 0.1 else "🏋️ **Strength**"
+                        
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #1f2937; padding: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 8px;">
+                                <div style="font-weight: bold; font-size: 0.95rem; margin-bottom: 4px;">{logo} {act_type}</div>
+                                <div style="font-size: 0.82rem; color: #d1d5db;">{dist_str}</div>
+                                <div style="font-size: 0.82rem; color: #d1d5db;">❤️ <b>{hr:.0f}</b> bpm</div>
+                                <div style="font-size: 0.82rem; color: #d1d5db;">🔥 <b>{cals:.0f}</b> kcal</div>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Clickable popover for extra deep metadata
+                        with st.popover("More Info"):
+                            st.markdown(f"#### {logo} {act_type}")
+                            st.write(f"**Category:** {cat}")
+                            st.write(f"**Distance:** {dist:.2f} km" if dist > 0.1 else "**Distance:** N/A")
+                            st.write(f"**Avg Heart Rate:** {hr:.1f} bpm")
+                            st.write(f"**Calories:** {cals:.0f} kcal")
                 else:
-                    st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
-                st.markdown("---")
+                    st.markdown(
+                        """
+                        <div style="background-color: #111827; padding: 10px; border-radius: 8px; color: #6b7280; text-align: center; font-size: 0.85rem; border: 1px dashed #374151;">
+                            Rest Day
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                    
+        st.markdown("---")
+        
+        # Summary Row below the 7-day grid
+        st.markdown("#### 📊 Weekly Summary Totals")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("Weekly Activities", len(week_df))
+        sc2.metric("Total Distance", f"{week_df['Distance_km'].sum():.1f} km")
+        sc3.metric("Avg HR", f"{week_df['Avg_HR'].mean():.1f} bpm" if not week_df.empty else "0 bpm")
+        sc4.metric("Total Calories", f"{week_df['Calories_kcal'].sum():,.0f} kcal")
 
 # --- VIEW 2: WEEKLY CALENDAR LOG ---
 elif view_mode == "Weekly Calendar Log":
@@ -369,7 +435,7 @@ elif view_mode == "Monthly Calendar Grid":
                         else:
                             st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
             st.markdown("---")
-            
+
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
