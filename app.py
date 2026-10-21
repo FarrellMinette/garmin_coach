@@ -126,6 +126,71 @@ if view_mode == "Metrics Overview":
     )
     st.plotly_chart(fig, use_container_width=True)
 
+# Add a new selection option to your sidebar radio
+view_mode = st.sidebar.radio("Select View", ["Metrics Overview", "3-Month Heatmap", "Periodic Summaries", "AI Coach Analysis"])
+
+# ... (keep your existing views, then add this new elif block) ...
+
+elif view_mode == "Periodic Summaries":
+    st.subheader("Periodic Training Aggregates")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        # Ensure Date is set as datetime index for resampling/period grouping
+        df_per = df.copy()
+        df_per['Date'] = pd.to_datetime(df_per['Date'])
+        
+        # Create period columns
+        df_per['Week_Period'] = df_per['Date'].dt.to_period('W').dt.start_time.dt.strftime('%Y-%m-%d')
+        df_per['Month_Period'] = df_per['Date'].dt.to_period('M').dt.strftime('%B %Y')
+        df_per['Quarter_Period'] = df_per['Date'].dt.to_period('Q').astype(str)
+        
+        period_tab = st.selectbox("Select Time Horizon", ["Weekly Summary", "Monthly Summary", "3-Month / Quarterly Summary"])
+        
+        if period_tab == "Weekly Summary":
+            st.markdown("### 📅 Weekly Breakdown")
+            group_col = 'Week_Period'
+            sort_order = False # Most recent first
+        elif period_tab == "Monthly Summary":
+            st.markdown("### 🗓️ Monthly Breakdown")
+            group_col = 'Month_Period'
+            sort_order = False
+        else:
+            st.markdown("### 📊 Quarterly (3-Month) Breakdown")
+            group_col = 'Quarter_Period'
+            sort_order = False
+
+        # Aggregate data safely
+        summary_df = df_per.groupby(group_col).agg(
+            Total_Activities=('Category', 'count'),
+            Total_Distance_km=('Distance_km', 'sum'),
+            Total_Calories=('Calories_kcal', 'sum'),
+            Avg_Heart_Rate=('Avg_HR', 'mean'),
+            Primary_Activity=('Category', lambda x: x.mode()[0] if not x.empty else 'Mixed')
+        ).reset_index()
+        
+        # Format numeric outputs for clean presentation
+        summary_df['Total_Distance_km'] = summary_df['Total_Distance_km'].round(2)
+        summary_df['Avg_Heart_Rate'] = summary_df['Avg_Heart_Rate'].round(1)
+        summary_df['Total_Calories'] = summary_df['Total_Calories'].round(0)
+        
+        summary_df = summary_df.sort_values(by=group_col, ascending=sort_order)
+        
+        # Display as a clean interactive dataframe table
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        
+        # Quick Static Metric Insights Cards based on the selection
+        st.markdown("---")
+        st.markdown("### 💡 Quick Deterministic Insights")
+        
+        max_row = summary_df.loc[summary_df['Total_Distance_km'].idxmax()] if not summary_df.empty else None
+        if max_row is not None:
+            st.info(f"🏆 **Peak Period:** Your highest distance period was **{max_row[group_col]}** with a total of **{max_row['Total_Distance_km']} km** across **{max_row['Total_Activities']} activities**.")
+            
+        avg_dist_period = summary_df['Total_Distance_km'].mean()
+        st.success(f"📈 **Consistency Baseline:** You average **{avg_dist_period:.1f} km** per {period_tab.split()[0].lower()} tracked.")
+        
 elif view_mode == "3-Month Heatmap":
     st.subheader("3-Month Activity Consistency Matrix")
     
