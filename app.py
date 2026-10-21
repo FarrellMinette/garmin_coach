@@ -96,218 +96,6 @@ def clean_activity_name(name):
         return "Other Activity"
     return name.replace('_', ' ').title()
 
-# --- REUSABLE COMPONENT: EXPANDED MORE INFO POPOVER (EVEN MORE INFO) ---
-def render_more_info_popover(row, logo, act_type, cat):
-    with st.popover("More Info ▾"):
-        st.markdown(f"### {logo} {act_type}")
-        st.caption(f"Logged on {pd.to_datetime(row['Date']).strftime('%A, %B %d, %Y at %H:%M')}")
-        st.markdown("---")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**📊 Core Metrics**")
-            dist = row.get('Distance_km', 0)
-            st.write(f"• **Distance:** {dist:.2f} km" if dist > 0.1 else "• **Distance:** N/A (Non-Distance)")
-            st.write(f"• **Avg HR:** {row.get('Avg_HR', 0):.0f} bpm")
-            st.write(f"• **Max HR:** {row.get('Max_HR', row.get('Avg_HR', 0)*1.15):.0f} bpm")
-            st.write(f"• **Calories:** {row.get('Calories_kcal', 0):.0f} kcal")
-            
-        with c2:
-            st.markdown("**⚡ Performance & Strain**")
-            duration = row.get('Duration_min', 'N/A')
-            st.write(f"• **Duration:** {duration} min" if isinstance(duration, (int, float)) else f"• **Duration:** {duration}")
-            if dist > 0.1 and 'Pace_min_km' in row:
-                st.write(f"• **Avg Pace:** {row['Pace_min_km']}")
-            if 'Elev_Gain_m' in row:
-                st.write(f"• **Elevation Gain:** {row['Elev_Gain_m']} m")
-            st.write(f"• **Category:** {cat}")
-            st.write(f"• **Training Load:** {cat} Base")
-            
-        st.markdown("---")
-        st.markdown("**🔬 Physiological Notes & Recovery Estimate**")
-        hr_val = row.get('Avg_HR', 0)
-        if hr_val > 160:
-            st.warning("⚠️ High cardiovascular strain recorded. Ensure 48h recovery before next high-intensity threshold session.")
-        elif hr_val > 0:
-            st.success("✅ Aerobic base/Zone 2 optimal range. Great for mitochondrial efficiency.")
-        else:
-            st.info("ℹ️ Standard recovery session logged.")
-
-# --- REUSABLE COMPONENT: UNIFIED CALENDAR VIEWS (Daily / Weekly / Monthly Tabs) ---
-def render_unified_calendar(df):
-    st.markdown("### 🗓️ Interactive Calendar Logs")
-    
-    cal_tab_daily, cal_tab_weekly, cal_tab_monthly = st.tabs(["Daily View", "Weekly View", "Monthly View"])
-    
-    # --- 1. DAILY VIEW ---
-    with cal_tab_daily:
-        st.markdown("##### Select Date:")
-        min_date = df['DateOnly'].min() if not df.empty else datetime.now().date()
-        max_date = df['DateOnly'].max() if not df.empty else datetime.now().date()
-        selected_date = st.date_input("View specific day", value=max_date, min_value=min_date, max_value=max_date, key="daily_picker")
-        
-        day_df = df[df['DateOnly'] == selected_date] if not df.empty else pd.DataFrame()
-        st.markdown(f"#### Activities for {selected_date.strftime('%A, %B %d, %Y')}")
-        
-        if not day_df.empty:
-            for _, row in day_df.iterrows():
-                cat = row.get('Category', 'Other Activity')
-                act_type = clean_activity_name(row.get('Activity Type', cat))
-                logo = sport_logos.get(cat, '🏅')
-                dist = row.get('Distance_km', 0)
-                hr = row.get('Avg_HR', 0)
-                cals = row.get('Calories_kcal', 0)
-                
-                col_left, _ = st.columns([1, 2])
-                with col_left:
-                    dist_display = f"🏃 **{dist:.2f} km**" if dist > 0.1 else "🏋️ **Strength Workout**"
-                    st.markdown(
-                        f"""
-                        <div style="background-color: #1f2937; padding: 14px; border-radius: 8px; border-left: 4px solid #3b82f6;">
-                            <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 6px;">{logo} {act_type}</div>
-                            <div style="font-size: 0.9rem; color: #d1d5db; margin-bottom: 2px;">{dist_display}</div>
-                            <div style="font-size: 0.9rem; color: #d1d5db; margin-bottom: 2px;">❤️ <b>{hr:.0f}</b> bpm</div>
-                            <div style="font-size: 0.9rem; color: #d1d5db;">🔥 <b>{cals:.0f}</b> kcal</div>
-                        </div>
-                        """, unsafe_allow_html=True
-                    )
-                    render_more_info_popover(row, logo, act_type, cat)
-                st.markdown("---")
-        else:
-            st.info("⚪ Rest Day — No workouts recorded on this date.")
-
-    # --- 2. WEEKLY VIEW ---
-    with cal_tab_weekly:
-        if df.empty:
-            st.warning("No data available.")
-        else:
-            df_w = df.copy()
-            df_w['Week_Start'] = df_w['Date'] - pd.to_timedelta(df_w['Date'].dt.dayofweek, unit='d')
-            df_w['Week_Start_Obj'] = df_w['Week_Start'].dt.date
-            unique_weeks = sorted(df_w['Week_Start_Obj'].unique(), reverse=True)
-            
-            st.markdown("##### Select Week:")
-            week_cols = st.columns(min(len(unique_weeks), 8))
-            if 'selected_week_btn' not in st.session_state:
-                st.session_state.selected_week_btn = unique_weeks[0] if unique_weeks else datetime.now().date()
-                
-            for idx, w_start in enumerate(unique_weeks[:8]):
-                w_label = w_start.strftime('%b %d')
-                if week_cols[idx].button(f"W: {w_label}", key=f"wk_btn_{w_start}"):
-                    st.session_state.selected_week_btn = w_start
-                    
-            selected_week_start = st.session_state.selected_week_btn
-            week_df = df_w[df_w['Week_Start_Obj'] == selected_week_start].copy()
-            week_start_dt = pd.to_datetime(selected_week_start)
-            week_days = pd.date_range(start=week_start_dt, periods=7)
-            
-            st.markdown(f"#### 🗓️ Week of {week_start_dt.strftime('%B %d')} — {(week_start_dt + timedelta(days=6)).strftime('%B %d, %Y')}")
-            
-            cols = st.columns(7)
-            weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-            
-            for i, single_date in enumerate(week_days):
-                d_obj = single_date.date()
-                day_acts = week_df[week_df['DateOnly'] == d_obj]
-                
-                with cols[i]:
-                    st.markdown(f"**{weekdays[i]}** <small>({single_date.strftime('%b %d')})</small>", unsafe_allow_html=True)
-                    if not day_acts.empty:
-                        for _, row in day_acts.iterrows():
-                            cat = row.get('Category', 'Other Activity')
-                            act_type = clean_activity_name(row.get('Activity Type', cat))
-                            logo = sport_logos.get(cat, '🏅')
-                            dist = row.get('Distance_km', 0)
-                            hr = row.get('Avg_HR', 0)
-                            cals = row.get('Calories_kcal', 0)
-                            
-                            dist_str = f"📏 <b>{dist:.2f} km</b>" if dist > 0.1 else "🏋️ <b>Strength</b>"
-                            
-                            st.markdown(
-                                f"""
-                                <div style="background-color: #1f2937; padding: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 6px;">
-                                    <div style="font-weight: bold; font-size: 0.95rem; margin-bottom: 4px;">{logo} {act_type}</div>
-                                    <div style="font-size: 0.82rem; color: #d1d5db;">{dist_str}</div>
-                                    <div style="font-size: 0.82rem; color: #d1d5db;">❤️ <b>{hr:.0f}</b> bpm</div>
-                                    <div style="font-size: 0.82rem; color: #d1d5db;">🔥 <b>{cals:.0f}</b> kcal</div>
-                                </div>
-                                """, unsafe_allow_html=True
-                            )
-                            render_more_info_popover(row, logo, act_type, cat)
-                    else:
-                        st.markdown(
-                            """
-                            <div style="background-color: #111827; padding: 10px; border-radius: 8px; color: #6b7280; text-align: center; font-size: 0.85rem; border: 1px dashed #374151;">
-                                Rest
-                            </div>
-                            """, unsafe_allow_html=True
-                        )
-
-    # --- 3. MONTHLY VIEW ---
-    with cal_tab_monthly:
-        if df.empty:
-            st.warning("No data available.")
-        else:
-            df_m = df.copy()
-            df_m['Month_Year'] = df_m['Date'].dt.to_period('M')
-            df_m['Year'] = df_m['Date'].dt.year
-            
-            available_years = sorted(df_m['Year'].unique(), reverse=False)
-            if 'selected_year_btn' not in st.session_state:
-                st.session_state.selected_year_btn = available_years[-1] if available_years else datetime.now().year
-                
-            st.markdown("##### Select Year:")
-            year_cols = st.columns(len(available_years) if len(available_years) > 0 else 1)
-            for idx, yr in enumerate(available_years):
-                if year_cols[idx].button(str(yr), key=f"yr_btn_{yr}"):
-                    st.session_state.selected_year_btn = yr
-                    
-            selected_year = st.session_state.selected_year_btn
-            year_df = df_m[df_m['Year'] == selected_year]
-            available_months = sorted(year_df['Month_Year'].unique(), reverse=False)
-            
-            if 'selected_month_btn' not in st.session_state or st.session_state.selected_month_btn.year != selected_year:
-                st.session_state.selected_month_btn = available_months[-1] if available_months else pd.Period(datetime.now(), 'M')
-                
-            st.markdown("##### Select Month:")
-            month_cols = st.columns(len(available_months) if len(available_months) > 0 else 1)
-            for idx, m_period in enumerate(available_months):
-                m_label = m_period.strftime('%B')
-                if month_cols[idx].button(m_label, key=f"mo_btn_{m_period}"):
-                    st.session_state.selected_month_btn = m_period
-                    
-            selected_month = st.session_state.selected_month_btn
-            m_df = df[df['Date'].dt.to_period('M') == selected_month].copy()
-            m_df['DayNum'] = m_df['Date'].dt.day
-            daily_map = m_df.groupby('DayNum').apply(lambda x: x.to_dict('records')).to_dict()
-            
-            cal_matrix = calendar.monthcalendar(selected_month.year, selected_month.month)
-            
-            st.markdown(f"#### {selected_month.strftime('%B %Y')} Grid")
-            cols = st.columns(7)
-            weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-            for i, day_name in enumerate(weekdays):
-                cols[i].markdown(f"**{day_name}**")
-                
-            for week in cal_matrix:
-                cols = st.columns(7)
-                for i, day in enumerate(week):
-                    if day == 0:
-                        cols[i].markdown("")
-                    else:
-                        with cols[i]:
-                            st.markdown(f"**{day}**")
-                            if day in daily_map:
-                                for act in daily_map[day]:
-                                    cat = act.get('Category', 'Other Activity')
-                                    act_type = clean_activity_name(act.get('Activity Type', cat))
-                                    logo = sport_logos.get(cat, '🏅')
-                                    st.markdown(f"<small>{logo} <b>{act_type}</b></small>", unsafe_allow_html=True)
-                                    render_more_info_popover(act, logo, act_type, cat)
-                            else:
-                                st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
-                st.markdown("---")
-
 df['Distance_km'] = safe_numeric(df.get('distance', df.get('Distance', 0))) / 1000.0 # Garmin API usually returns meters
 df['Calories_kcal'] = safe_numeric(df.get('calories', df.get('Calories', 0)))
 df['Avg_HR'] = safe_numeric(df.get('averageHR', df.get('Avg HR', 0)))
@@ -336,70 +124,331 @@ sport_logos = {
 }
 
 # --- VIEW 1: UNIFIED TRAINING DASHBOARD ---
-if view_mode == "Training Dashboard (Overview & Calendar)":
+if view_mode == "Training Dashboard (Overview & Heatmap)":
     st.subheader("🚀 Training & Consistency Hub")
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Activities Logged", len(df))
-    col2.metric("Total Distance", f"{df['Distance_km'].sum():.1f} km" if not df.empty else "0 km")
-    col3.metric("Avg Training Heart Rate", f"{df['Avg_HR'].mean():.1f} bpm" if not df.empty else "0 bpm")
+    col2.metric("Total Distance", f"{df['Distance_km'].sum():.1f} km")
+    col3.metric("Avg Training Heart Rate", f"{df['Avg_HR'].mean():.1f} bpm")
     
     st.markdown("---")
     
-    # 1. Unified Calendar Logs (Daily, Weekly, Monthly Tabs) placed right before heatmap
-    render_unified_calendar(df)
-    
-    st.markdown("---")
-    
-    # 2. 3-Month Consistency Heatmap
+    # 3-Month Consistency Heatmap styled with dark background matching Plotly charts
     st.markdown("### 🗓️ 3-Month Consistency Heatmap")
     end_date = df['Date'].max() if not df.empty else datetime.now()
     start_date = end_date - timedelta(days=90)
-    df_recent = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)].copy() if not df.empty else df.copy()
+    df_recent = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)].copy()
+    df_recent['Day'] = df_recent['Date'].dt.date
     
-    if not df_recent.empty:
-        df_recent['Day'] = df_recent['Date'].dt.date
-        daily_activities = df_recent.groupby('Day')['Category'].apply(list).to_dict()
-        date_range = pd.date_range(start=start_date, end=end_date)
-        cal_df = pd.DataFrame({'Date': date_range})
-        cal_df['DateObj'] = cal_df['Date'].dt.date
-        cal_df['Week'] = cal_df['Date'].dt.isocalendar().week
-        
-        unique_weeks = cal_df['Week'].unique()
-        week_map = {w: i for i, w in enumerate(unique_weeks)}
-        cal_df['WeekIdx'] = cal_df['Week'].map(week_map)
-        cal_df['Visual_y'] = 6 - cal_df['Date'].dt.dayofweek
-        
-        fig_hm, ax = plt.subplots(figsize=(14, 4.5), dpi=300)
-        fig_hm.patch.set_facecolor('#0e1117')
-        ax.set_facecolor('#0e1117')
-        
-        for idx, row in cal_df.iterrows():
-            wk_idx, y_pos = row['WeekIdx'], row['Visual_y']
-            d = row['DateObj']
-            ax.add_patch(patches.Circle((wk_idx, y_pos), 0.4, facecolor='#262730', edgecolor='#363842', linewidth=0.5, zorder=1))
-            if d in daily_activities:
-                acts = daily_activities[d]
-                if len(acts) == 1:
-                    ax.add_patch(patches.Circle((wk_idx, y_pos), 0.38, facecolor=sport_colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
-                elif len(acts) >= 2:
-                    ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 90, 270, facecolor=sport_colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
-                    ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 270, 90, facecolor=sport_colors.get(acts[1], '#e74c3c'), edgecolor='none', zorder=2))
+    daily_activities = df_recent.groupby('Day')['Category'].apply(list).to_dict()
+    date_range = pd.date_range(start=start_date, end=end_date)
+    cal_df = pd.DataFrame({'Date': date_range})
+    cal_df['DateObj'] = cal_df['Date'].dt.date
+    cal_df['Week'] = cal_df['Date'].dt.isocalendar().week
+    
+    unique_weeks = cal_df['Week'].unique()
+    week_map = {w: i for i, w in enumerate(unique_weeks)}
+    cal_df['WeekIdx'] = cal_df['Week'].map(week_map)
+    cal_df['Visual_y'] = 6 - cal_df['Date'].dt.dayofweek
+    
+    fig_hm, ax = plt.subplots(figsize=(14, 4.5), dpi=300)
+    fig_hm.patch.set_facecolor('#0e1117')
+    ax.set_facecolor('#0e1117')
+    
+    for idx, row in cal_df.iterrows():
+        wk_idx, y_pos = row['WeekIdx'], row['Visual_y']
+        d = row['DateObj']
+        ax.add_patch(patches.Circle((wk_idx, y_pos), 0.4, facecolor='#262730', edgecolor='#363842', linewidth=0.5, zorder=1))
+        if d in daily_activities:
+            acts = daily_activities[d]
+            if len(acts) == 1:
+                ax.add_patch(patches.Circle((wk_idx, y_pos), 0.38, facecolor=sport_colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
+            elif len(acts) >= 2:
+                ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 90, 270, facecolor=sport_colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
+                ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 270, 90, facecolor=sport_colors.get(acts[1], '#e74c3c'), edgecolor='none', zorder=2))
 
-        ax.set_xlim(-0.8, cal_df['WeekIdx'].max() + 0.8)
-        ax.set_ylim(-1.0, 7.0)
-        ax.set_aspect('equal')
-        ax.axis('off')
+    ax.set_xlim(-0.8, cal_df['WeekIdx'].max() + 0.8)
+    ax.set_ylim(-1.0, 7.0)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    
+    day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    for i, label in enumerate(day_labels):
+        ax.text(-1.5, 6 - i, label, ha='right', va='center', fontsize=10, fontweight='bold', color='#fafafa')
         
-        day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-        for i, label in enumerate(day_labels):
-            ax.text(-1.5, 6 - i, label, ha='right', va='center', fontsize=10, fontweight='bold', color='#fafafa')
+    # Add Legend to Heatmap
+    legend_elements = [patches.Patch(facecolor=color, label=sport) for sport, color in sport_colors.items()]
+    ax.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=4, facecolor='#262730', edgecolor='none', labelcolor='white')
+    
+    st.pyplot(fig_hm)
+
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
+elif view_mode == "Weekly Calendar Log":
+    st.subheader("📅 Weekly Calendar View (7-Column Grid)")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        # Group activities by calendar week (Monday start)
+        df_w = df.copy()
+        df_w['Week_Start'] = df_w['Date'] - pd.to_timedelta(df_w['Date'].dt.dayofweek, unit='d')
+        df_w['Week_Start_Obj'] = df_w['Week_Start'].dt.date
+        
+        unique_weeks = sorted(df_w['Week_Start_Obj'].unique(), reverse=True)
+        
+        # Horizontal button row for week selection
+        st.markdown("##### Select Week:")
+        week_cols = st.columns(min(len(unique_weeks), 8))
+        
+        if 'selected_week_btn' not in st.session_state:
+            st.session_state.selected_week_btn = unique_weeks[0] # Default to current/latest week
             
-        legend_elements = [patches.Patch(facecolor=color, label=sport) for sport, color in sport_colors.items()]
-        ax.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=4, facecolor='#262730', edgecolor='none', labelcolor='white')
+        for idx, w_start in enumerate(unique_weeks[:8]):
+            w_label = w_start.strftime('%b %d')
+            if week_cols[idx].button(f"W: {w_label}", key=f"wk_btn_{w_start}"):
+                st.session_state.selected_week_btn = w_start
+                
+        selected_week_start = st.session_state.selected_week_btn
+        week_df = df_w[df_w['Week_Start_Obj'] == selected_week_start].copy()
+        week_start_dt = pd.to_datetime(selected_week_start)
+        week_days = pd.date_range(start=week_start_dt, periods=7)
+        week_df['DateOnly'] = week_df['Date'].dt.date
         
-        st.pyplot(fig_hm)
+        st.markdown("---")
+        st.markdown(f"### 🗓️ Week of {week_start_dt.strftime('%B %d')} — {(week_start_dt + timedelta(days=6)).strftime('%B %d, %Y')}")
+        
+        # 1 Row x 7 Columns Layout (Mon -> Sun)
+        cols = st.columns(7)
+        weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        
+        for i, single_date in enumerate(week_days):
+            d_obj = single_date.date()
+            day_acts = week_df[week_df['DateOnly'] == d_obj]
+            
+            with cols[i]:
+                # Column Header: Day Name + Date
+                st.markdown(f"**{weekdays[i]}** <small>({single_date.strftime('%b %d')})</small>", unsafe_allow_html=True)
+                
+                if not day_acts.empty:
+                    for _, row in day_acts.iterrows():
+                        cat = row.get('Category', 'Other Activity')
+                        raw_type = row.get('Activity Type', cat)
+                        act_type = clean_activity_name(raw_type)
+                        logo = sport_logos.get(cat, '🏅')
+                        dist = row.get('Distance_km', 0)
+                        hr = row.get('Avg_HR', 0)
+                        cals = row.get('Calories_kcal', 0)
+                        
+                        # Structured card with detailed key info
+                        dist_str = f"📏 **{dist:.2f} km**" if dist > 0.1 else "🏋️ **Strength**"
+                        
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #1f2937; padding: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 8px;">
+                                <div style="font-weight: bold; font-size: 0.95rem; margin-bottom: 4px;">{logo} {act_type}</div>
+                                <div style="font-size: 0.82rem; color: #d1d5db;">{dist_str}</div>
+                                <div style="font-size: 0.82rem; color: #d1d5db;">❤️ <b>{hr:.0f}</b> bpm</div>
+                                <div style="font-size: 0.82rem; color: #d1d5db;">🔥 <b>{cals:.0f}</b> kcal</div>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Clickable popover for extra deep metadata
+                        with st.popover("More Info"):
+                            st.markdown(f"#### {logo} {act_type}")
+                            st.write(f"**Category:** {cat}")
+                            st.write(f"**Distance:** {dist:.2f} km" if dist > 0.1 else "**Distance:** N/A")
+                            st.write(f"**Avg Heart Rate:** {hr:.1f} bpm")
+                            st.write(f"**Calories:** {cals:.0f} kcal")
+                else:
+                    st.markdown(
+                        """
+                        <div style="background-color: #111827; padding: 10px; border-radius: 8px; color: #6b7280; text-align: center; font-size: 0.85rem; border: 1px dashed #374151;">
+                            Rest Day
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                    
+        st.markdown("---")
+        
+        # Summary Row below the 7-day grid
+        st.markdown("#### 📊 Weekly Summary Totals")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("Weekly Activities", len(week_df))
+        sc2.metric("Total Distance", f"{week_df['Distance_km'].sum():.1f} km")
+        sc3.metric("Avg HR", f"{week_df['Avg_HR'].mean():.1f} bpm" if not week_df.empty else "0 bpm")
+        sc4.metric("Total Calories", f"{week_df['Calories_kcal'].sum():,.0f} kcal")
 
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
+elif view_mode == "Weekly Calendar Log":
+    st.subheader("📅 Weekly Activity Log View")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        # Create week start identifier (Monday of each week)
+        df_w = df.copy()
+        df_w['Week_Start'] = df_w['Date'] - pd.to_timedelta(df_w['Date'].dt.dayofweek, unit='d')
+        df_w['Week_Start_Obj'] = df_w['Week_Start'].dt.date
+        
+        unique_weeks = sorted(df_w['Week_Start_Obj'].unique(), reverse=True)
+        
+        selected_week_start = st.selectbox(
+            "Select Week",
+            unique_weeks,
+            format_func=lambda x: f"Week of {x.strftime('%B %d, %Y')}"
+        )
+        
+        week_df = df_w[df_w['Week_Start_Obj'] == selected_week_start].copy()
+        week_start_dt = pd.to_datetime(selected_week_start)
+        week_days = pd.date_range(start=week_start_dt, periods=7)
+        
+        week_df['DateOnly'] = week_df['Date'].dt.date
+        
+        st.markdown(f"### Week: {week_start_dt.strftime('%b %d')} — {(week_start_dt + timedelta(days=6)).strftime('%b %d, %Y')}")
+        st.markdown("---")
+        
+        for single_date in week_days:
+            d_obj = single_date.date()
+            day_name = single_date.strftime('%A, %b %d, %Y')
+            day_acts = week_df[week_df['DateOnly'] == d_obj]
+            
+            if not day_acts.empty:
+                for _, row in day_acts.iterrows():
+                    cat = row.get('Category', 'Other Activity')
+                    raw_type = row.get('Activity Type', cat)
+                    act_type = clean_activity_name(raw_type)
+                    logo = sport_logos.get(cat, '🏅')
+                    dist = row.get('Distance_km', 0)
+                    hr = row.get('Avg_HR', 0)
+                    cals = row.get('Calories_kcal', 0)
+                    
+                    st.markdown(f"#### 🟢 {day_name} (Active)")
+                    c1, c2, c3, c4 = st.columns(4)
+                    
+                    if dist > 0.1:
+                        c1.metric("Distance", f"{dist:.2f} km")
+                    else:
+                        c1.metric("Calories", f"{cals:.0f} kcal")
+                        
+                    c2.metric("Avg HR", f"{hr:.1f} bpm")
+                    c3.metric("Activity", f"{logo} {act_type}")
+                    c4.metric("Category", cat)
+                    st.markdown("---")
+            else:
+                st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
+                st.markdown("---")
+                
+
+# --- VIEW 3: MONTHLY CALENDAR GRID ---
+elif view_mode == "Monthly Calendar Grid":
+    st.subheader("🗓️ Monthly Calendar Grid & Activity Slots")
+    
+    # Inject CSS to make popover buttons borderless and transparent
+    st.markdown("""
+        <style>
+        [data-testid="stPopover"] > button {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 2px 4px !important;
+        }
+        [data-testid="stPopover"] > button:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        df['Month_Year'] = df['Date'].dt.to_period('M')
+        df['Year'] = df['Date'].dt.year
+        
+        # 1. Available Years Selection
+        available_years = sorted(df['Year'].unique(), reverse=False)
+        
+        if 'selected_year_btn' not in st.session_state:
+            st.session_state.selected_year_btn = available_years[-1] # Default to latest year
+            
+        st.markdown("##### Select Year:")
+        year_cols = st.columns(len(available_years) if len(available_years) > 0 else 1)
+        for idx, yr in enumerate(available_years):
+            if year_cols[idx].button(str(yr), key=f"year_btn_{yr}"):
+                st.session_state.selected_year_btn = yr
+                
+        selected_year = st.session_state.selected_year_btn
+        
+        # 2. Available Months for the Selected Year
+        year_df = df[df['Year'] == selected_year]
+        available_months = sorted(year_df['Month_Year'].unique(), reverse=False)
+        
+        if 'selected_month_btn' not in st.session_state or st.session_state.selected_month_btn.year != selected_year:
+            st.session_state.selected_month_btn = available_months[-1] # Default to latest month of selected year
+            
+        st.markdown("##### Select Month:")
+        month_cols = st.columns(len(available_months) if len(available_months) > 0 else 1)
+        for idx, m_period in enumerate(available_months):
+            m_label = m_period.strftime('%B') # Displays clean month name (e.g. "September")
+            if month_cols[idx].button(m_label, key=f"month_btn_{m_period}"):
+                st.session_state.selected_month_btn = m_period
+                
+        selected_month = st.session_state.selected_month_btn
+        
+        # 3. Render Calendar Grid for Selected Month
+        m_df = df[df['Month_Year'] == selected_month].copy()
+        m_df['DayNum'] = m_df['Date'].dt.day
+        daily_map = m_df.groupby('DayNum').apply(lambda x: x.to_dict('records')).to_dict()
+        
+        year = selected_month.year
+        month = selected_month.month
+        import calendar
+        cal_matrix = calendar.monthcalendar(year, month)
+        
+        st.markdown("---")
+        st.markdown(f"### 🗓️ {selected_month.strftime('%B %Y')} Calendar")
+        cols = st.columns(7)
+        weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        for i, day_name in enumerate(weekdays):
+            cols[i].markdown(f"**{day_name}**")
+            
+        for week in cal_matrix:
+            cols = st.columns(7)
+            for i, day in enumerate(week):
+                if day == 0:
+                    cols[i].markdown("")
+                else:
+                    with cols[i]:
+                        st.markdown(f"**{day}**")
+                        if day in daily_map:
+                            for act in daily_map[day]:
+                                cat = act.get('Category', 'Other Activity')
+                                raw_type = act.get('Activity Type', cat)
+                                act_type = clean_activity_name(raw_type)
+                                logo = sport_logos.get(cat, '🏅')
+                                dist = act.get('Distance_km', 0)
+                                hr = act.get('Avg_HR', 0)
+                                cals = act.get('Calories_kcal', 0)
+                                
+                                # Popover button displaying logo and full activity name cleanly
+                                popover_label = f"{logo} {act_type}"
+                                with st.popover(popover_label):
+                                    st.markdown(f"### {logo} {act_type}")
+                                    st.markdown("---")
+                                    st.write(f"**Category:** {cat}")
+                                    if dist > 0.1:
+                                        st.write(f"**Distance:** {dist:.2f} km")
+                                    st.write(f"**Avg Heart Rate:** {hr:.0f} bpm")
+                                    st.write(f"**Calories:** {cals:.0f} kcal")
+                        else:
+                            st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
+            st.markdown("---")
+            
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
