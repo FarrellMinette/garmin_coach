@@ -1,93 +1,88 @@
-# garminette
+# 🏃‍♂️ Garmin AI Training Dashboard & Coach
 
+A fully functional, $0-cost custom Garmin web app and dashboard built with Python, Streamlit, and Google Gemini. It transforms raw Garmin Connect activity data into interactive calendar logs, per-sport trend analysis, and physiological AI training audits.
 
+---
 
-## Getting started
+## 🌟 Features Currently Implemented
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### 1. 🚀 Training & Consistency Hub
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+* **Core Metrics:** High-level overview displaying total logged activities, cumulative distance, and average training heart rate.
+* **Unified Interactive Calendar Logs:** Tabbed interface for **Daily**, **Weekly** (1-row x 7-column grid spanning Monday through Sunday), and **Monthly** calendar grid views.
+* **Rich Activity Metadata:** Clickable "More Info" popovers providing distance, average/max heart rate, calories, duration, pace, elevation, and recovery estimates.
+* **3-Month Consistency Heatmap:** Visual breakdown of workout density over a rolling 90-day period with custom sport-coded colors and split activity indicators.
 
-## Add your files
+### 2. 📅 Interactive Log & Selector Controls
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+* **Year & Month Button Selectors:** Clean, horizontal button rows to quickly switch between years and active months without clutter.
+* **Weekly 7-Day Grid:** Side-by-side view featuring custom metric cards slotted directly into each day column.
+* **Smart Metric Handling:** Displays distance (km) for endurance sports (running, cycling, walking) and non-distance indicators (calories/strength) for gym sessions.
+* **Clean Activity Standardizing:** Removes underscores and formats raw Garmin activity keys into properly capitalized titles (e.g., `indoor_cycling` ➔ `Indoor Cycling`).
+
+### 3. 🏆 Per-Sport Insights & Trends
+
+* Deterministic deep dives into specific activity categories (Running, Cycling, Strength, Walking, Water Sports, Racket Sports).
+* Interactive progression and heart rate effort scaling charts using Plotly.
+* Complete tabbed activity log with customizable columns.
+
+### 4. 🤖 Gemini AI Physiological Training Audit
+
+* Direct integration with `gemini-2.0-flash` via the Google GenAI SDK (`google-genai`).
+* Generates evidence-based audits covering training intensity distribution (Zone 2 vs. high HR), cardiovascular strain, and targeted weekly workout recommendations.
+
+---
+
+## 🛠️ Tech Stack & Architecture
+
+* **Frontend & Framework:** Streamlit (Streamlit Community Cloud)
+* **Data Processing & Analytics:** `pandas`, `numpy`
+* **Data Visualization:** `matplotlib`, `plotly`
+* **Garmin API Ingestion:** `garminconnect`
+* **AI Engine:** Google GenAI SDK (`google-genai` / `gemini-2.0-flash`)
+* **Hosting:** Streamlit Cloud with `.streamlit/secrets.toml` secret management
+
+---
+
+## 🎯 Next Improvements & Future Roadmap
+
+* [ ] **Modular Code Refactoring:** Break down `app.py` into a structured, multi-file codebase (`views/`, `utils.py`, `components/`) for improved maintainability.
+* [ ] **Local Session Caching & Persistent Tokens:** Implement local session token storage for `garminconnect` to prevent re-authentication overhead on app reloads.
+* [ ] **Advanced Heart Rate Zone Distribution:** Add dedicated Zone 1–Zone 5 time-in-zone charts per activity and per week.
+* [ ] **Custom Workout & Target Logging:** Build a user input module to log subjective fatigue, sleep scores, and future weekly mileage targets.
+* [ ] **Expanded AI Prompt Customization:** Allow toggling AI audit focus areas (e.g., marathon training prep, injury prevention, recovery strategy).
+
+---
+
+## 🚀 Getting Started Locally
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/your-username/garmin-ai-dashboard.git
+cd garmin-ai-dashboard
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/MinetteFarrell/garminette.git
-git branch -M main
-git push -uf origin main
+
+
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+
 ```
 
-## Integrate with your tools
 
-* [Set up project integrations](https://gitlab.com/MinetteFarrell/garminette/-/settings/integrations)
+3. **Configure Secrets:**
+Create `.streamlit/secrets.toml` in the project root:
+```toml
+GARMIN_EMAIL = "your_garmin_email@example.com"
+GARMIN_PASSWORD = "your_garmin_password"
+GEMINI_API_KEY = "your_google_gemini_api_key"
 
-## Collaborate with your team
+```
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
 
-## Test and Deploy
+4. **Run the Streamlit app:**
+```bash
+streamlit run app.py
 
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```
