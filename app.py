@@ -117,26 +117,6 @@ if view_mode == "Training Dashboard (Overview & Heatmap)":
     
     st.markdown("---")
     
-    # Interactive Plotly Chart (Metrics Overview)
-    st.markdown("### 📈 Activity Volume & Heart Rate Over Time")
-    df_plot = df.copy()
-    df_plot['Avg_HR'] = df_plot['Avg_HR'].fillna(0)
-    df_plot['Distance_km'] = df_plot['Distance_km'].fillna(0.1)
-    df_plot['Bubble_Size'] = df_plot['Distance_km'].apply(lambda x: max(float(x), 1.0))
-
-    fig = px.scatter(
-        df_plot, 
-        x='Date', 
-        y='Avg_HR', 
-        color='Category', 
-        size='Bubble_Size',
-        hover_data=['Activity Type', 'Distance_km', 'Calories_kcal'], 
-        title=""
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    
     # 3-Month Consistency Heatmap
     st.markdown("### 🗓️ 3-Month Consistency Heatmap")
     end_date = df['Date'].max() if not df.empty else datetime.now()
@@ -223,16 +203,30 @@ elif view_mode == "Last Week's Daily Log":
         if last_week_df.empty:
             st.info("No activities logged in the last 7 days.")
         else:
+            # Sport logo/emoji mapper dictionary
+            sport_logos = {
+                'Running': '🏃‍♂️',
+                'Cycling': '🚴‍♂️',
+                'Strength': '🏋️‍♂️',
+                'Walking': '🚶‍♂️',
+                'Water Sports': '🏊‍♂️',
+                'Racket Sports': '🎾',
+                'Other Activity': '🏅'
+            }
+            
             st.markdown(f"Showing daily activity breakdown from **{week_ago.strftime('%Y-%m-%d')}** to **{latest_date.strftime('%Y-%m-%d')}**:")
             for idx, row in last_week_df.iterrows():
                 d_str = pd.to_datetime(row['Date']).strftime('%A, %b %d, %Y')
+                category = row.get('Category', 'Other Activity')
+                logo = sport_logos.get(category, '🏅')
+                
                 with st.container():
-                    st.markdown(f"#### 🔹 {d_str}: {row['Activity Type']}")
+                    st.markdown(f"#### {logo} {d_str}: {row['Activity Type']}")
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("Distance", f"{row.get('Distance_km', 0):.2f} km")
                     c2.metric("Avg HR", f"{row.get('Avg_HR', 0)} bpm")
                     c3.metric("Calories", f"{row.get('Calories_kcal', 0)} kcal")
-                    c4.metric("Category", f"{row.get('Category', 'N/A')}")
+                    c4.metric("Sport", f"{logo} {category}")
                     st.markdown("---")
 
 # --- VIEW 3: PER-SPORT INSIGHTS ---
