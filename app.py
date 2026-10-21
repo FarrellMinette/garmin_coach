@@ -332,7 +332,7 @@ elif view_mode == "Per-Sport Insights":
         sport_df = df[df['Category'] == selected_sport].sort_values(by='Date', ascending=False)
         logo = sport_logos.get(selected_sport, '🏅')
         
-        st.markdown(---)
+        st.markdown("---")
         st.markdown(f"### {logo} Deep-Dive Analytics: {selected_sport}")
         
         sc1, sc2, sc3, sc4 = st.columns(4)
