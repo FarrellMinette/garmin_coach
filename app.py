@@ -175,25 +175,28 @@ elif view_mode == "3-Month Heatmap":
 elif view_mode == "AI Coach Analysis":
     st.subheader("Gemini AI Training Audit")
     if st.button("Generate Physiological Audit"):
-        with st.spinner("Analyzing your Garmin training load and heart rate zones..."):
-            # Initialize Gemini SDK
-            client_ai = genai.Client(api_key=GEMINI_KEY)
-            
-            # Summarize recent dataframe stats for the prompt
-            summary_stats = df[['Activity Type', 'Distance_km', 'Calories_kcal', 'Avg_HR']].head(20).to_string()
-            prompt = f"""
-            You are a rigorous sports scientist and exercise physiologist. Review these recent Garmin activities:
-            {summary_stats}
-            
-            Provide a precise, scientifically accurate audit of:
-            1. Training intensity distribution (polarization / high HR vs Zone 2 balance).
-            2. Cardiovascular strain and recovery implications.
-            3. Two actionable, specific workouts to improve efficiency this week.
-            Keep it structured, punchy, and evidence-based.
-            """
-            
-            response = client_ai.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-            )
-            st.markdown(response.text)
+        if df.empty:
+            st.warning("No activity data available to analyze.")
+        else:
+            with st.spinner("Analyzing your Garmin training load and heart rate zones..."):
+                client_ai = genai.Client(api_key=GEMINI_KEY)
+                summary_stats = df[['Activity Type', 'Distance_km', 'Calories_kcal', 'Avg_HR']].head(20).to_string()
+                prompt = f"""
+                You are a rigorous sports scientist and exercise physiologist. Review these recent Garmin activities:
+                {summary_stats}
+                
+                Provide a precise, scientifically accurate audit of:
+                1. Training intensity distribution (polarization / high HR vs Zone 2 balance).
+                2. Cardiovascular strain and recovery implications.
+                3. Two actionable, specific workouts to improve efficiency this week.
+                Keep it structured, punchy, and evidence-based.
+                """
+                
+                try:
+                    response = client_ai.models.generate_content(
+                        model='gemini-1.5-flash',
+                        contents=prompt,
+                    )
+                    st.markdown(response.text)
+                except Exception as e:
+                    st.error(f"API Error: {e}")
