@@ -343,7 +343,7 @@ elif view_mode == "Weekly Calendar Log":
                 st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
                 st.markdown("---")
                 
-# --- VIEW 3: MONTHLY CALENDAR GRID ---
+
 # --- VIEW 3: MONTHLY CALENDAR GRID ---
 elif view_mode == "Monthly Calendar Grid":
     st.subheader("🗓️ Monthly Calendar Grid & Activity Slots")
@@ -368,26 +368,39 @@ elif view_mode == "Monthly Calendar Grid":
         st.warning("No data available.")
     else:
         df['Month_Year'] = df['Date'].dt.to_period('M')
+        df['Year'] = df['Date'].dt.year
         
-        min_date = df['Date'].min()
-        max_date = df['Date'].max()
-        all_months = pd.period_range(start=pd.Period(min_date, 'M'), end=pd.Period(max_date, 'M'), freq='M')
-        available_months = sorted(all_months, reverse=False)
+        # 1. Available Years Selection
+        available_years = sorted(df['Year'].unique(), reverse=False)
         
-        # Interactive Month Button Selector (matching Per-Sport style)
+        if 'selected_year_btn' not in st.session_state:
+            st.session_state.selected_year_btn = available_years[-1] # Default to latest year
+            
+        st.markdown("##### Select Year:")
+        year_cols = st.columns(len(available_years) if len(available_years) > 0 else 1)
+        for idx, yr in enumerate(available_years):
+            if year_cols[idx].button(str(yr), key=f"year_btn_{yr}"):
+                st.session_state.selected_year_btn = yr
+                
+        selected_year = st.session_state.selected_year_btn
+        
+        # 2. Available Months for the Selected Year
+        year_df = df[df['Year'] == selected_year]
+        available_months = sorted(year_df['Month_Year'].unique(), reverse=False)
+        
+        if 'selected_month_btn' not in st.session_state or st.session_state.selected_month_btn.year != selected_year:
+            st.session_state.selected_month_btn = available_months[-1] # Default to latest month of selected year
+            
         st.markdown("##### Select Month:")
         month_cols = st.columns(len(available_months) if len(available_months) > 0 else 1)
-        
-        if 'selected_month_btn' not in st.session_state:
-            st.session_state.selected_month_btn = available_months[-1] # Default to latest month
-            
         for idx, m_period in enumerate(available_months):
-            m_label = m_period.strftime('%b %Y')
-            if month_cols[idx].button(m_label, key=f"month_btn_{m_label}"):
+            m_label = m_period.strftime('%B') # Displays clean month name (e.g. "September")
+            if month_cols[idx].button(m_label, key=f"month_btn_{m_period}"):
                 st.session_state.selected_month_btn = m_period
                 
         selected_month = st.session_state.selected_month_btn
         
+        # 3. Render Calendar Grid for Selected Month
         m_df = df[df['Month_Year'] == selected_month].copy()
         m_df['DayNum'] = m_df['Date'].dt.day
         daily_map = m_df.groupby('DayNum').apply(lambda x: x.to_dict('records')).to_dict()
@@ -398,7 +411,7 @@ elif view_mode == "Monthly Calendar Grid":
         cal_matrix = calendar.monthcalendar(year, month)
         
         st.markdown("---")
-        st.markdown(f"### {selected_month.strftime('%B %Y')} Calendar")
+        st.markdown(f"### 🗓️ {selected_month.strftime('%B %Y')} Calendar")
         cols = st.columns(7)
         weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         for i, day_name in enumerate(weekdays):
@@ -435,7 +448,7 @@ elif view_mode == "Monthly Calendar Grid":
                         else:
                             st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
             st.markdown("---")
-
+            
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
