@@ -89,6 +89,13 @@ df['Category'] = df['Activity Type'].apply(categorize_activity)
 def safe_numeric(series):
     return pd.to_numeric(series.astype(str).str.replace('--', 'NaN').str.replace(',', '').str.replace("'", ""), errors='coerce')
 
+# --- VIEW 3: MONTHLY CALENDAR GRID ---
+def clean_activity_name(name):
+    """Replaces underscores with spaces and capitalizes each word."""
+    if not isinstance(name, str):
+        return "Other Activity"
+    return name.replace('_', ' ').title()
+
 df['Distance_km'] = safe_numeric(df.get('distance', df.get('Distance', 0))) / 1000.0 # Garmin API usually returns meters
 df['Calories_kcal'] = safe_numeric(df.get('calories', df.get('Calories', 0)))
 df['Avg_HR'] = safe_numeric(df.get('averageHR', df.get('Avg HR', 0)))
@@ -209,13 +216,6 @@ elif view_mode == "Weekly Calendar Log":
                 else:
                     st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
                 st.markdown("---")
-
-# --- VIEW 3: MONTHLY CALENDAR GRID ---
-def clean_activity_name(name):
-    """Replaces underscores with spaces and capitalizes each word."""
-    if not isinstance(name, str):
-        return "Other Activity"
-    return name.replace('_', ' ').title()
 
 # --- VIEW 3: MONTHLY CALENDAR GRID ---
 elif view_mode == "Monthly Calendar Grid":
@@ -358,7 +358,7 @@ elif view_mode == "Weekly Calendar Log":
             )
         else:
             st.info("No activities logged for this week.")
-            
+
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
