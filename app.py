@@ -276,13 +276,13 @@ elif view_mode == "Weekly Calendar Log":
             else:
                 st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
                 st.markdown("---")
-
+                
 # --- VIEW 3: MONTHLY CALENDAR GRID ---
 # --- VIEW 3: MONTHLY CALENDAR GRID ---
 elif view_mode == "Monthly Calendar Grid":
     st.subheader("🗓️ Monthly Calendar Grid & Activity Slots")
     
-    # Inject CSS to make popover buttons borderless and transparent (just the logo)
+    # Inject CSS to make popover buttons borderless and transparent
     st.markdown("""
         <style>
         [data-testid="stPopover"] > button {
@@ -290,7 +290,6 @@ elif view_mode == "Monthly Calendar Grid":
             border: none !important;
             box-shadow: none !important;
             padding: 2px 4px !important;
-            font-size: 1.3rem !important;
         }
         [data-testid="stPopover"] > button:hover {
             background: rgba(255, 255, 255, 0.08) !important;
@@ -309,12 +308,19 @@ elif view_mode == "Monthly Calendar Grid":
         all_months = pd.period_range(start=pd.Period(min_date, 'M'), end=pd.Period(max_date, 'M'), freq='M')
         available_months = sorted(all_months, reverse=False)
         
-        selected_month = st.selectbox(
-            "Select Month", 
-            available_months, 
-            format_func=lambda x: x.strftime('%B %Y'),
-            index=len(available_months)-1
-        )
+        # Interactive Month Button Selector (matching Per-Sport style)
+        st.markdown("##### Select Month:")
+        month_cols = st.columns(len(available_months) if len(available_months) > 0 else 1)
+        
+        if 'selected_month_btn' not in st.session_state:
+            st.session_state.selected_month_btn = available_months[-1] # Default to latest month
+            
+        for idx, m_period in enumerate(available_months):
+            m_label = m_period.strftime('%b %Y')
+            if month_cols[idx].button(m_label, key=f"month_btn_{m_label}"):
+                st.session_state.selected_month_btn = m_period
+                
+        selected_month = st.session_state.selected_month_btn
         
         m_df = df[df['Month_Year'] == selected_month].copy()
         m_df['DayNum'] = m_df['Date'].dt.day
@@ -325,6 +331,7 @@ elif view_mode == "Monthly Calendar Grid":
         import calendar
         cal_matrix = calendar.monthcalendar(year, month)
         
+        st.markdown("---")
         st.markdown(f"### {selected_month.strftime('%B %Y')} Calendar")
         cols = st.columns(7)
         weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -349,8 +356,9 @@ elif view_mode == "Monthly Calendar Grid":
                                 hr = act.get('Avg_HR', 0)
                                 cals = act.get('Calories_kcal', 0)
                                 
-                                # Clean popover button displaying ONLY the logo icon with no borders
-                                with st.popover(logo):
+                                # Popover button displaying logo and full activity name cleanly
+                                popover_label = f"{logo} {act_type}"
+                                with st.popover(popover_label):
                                     st.markdown(f"### {logo} {act_type}")
                                     st.markdown("---")
                                     st.write(f"**Category:** {cat}")
