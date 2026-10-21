@@ -211,6 +211,13 @@ elif view_mode == "Weekly Calendar Log":
                 st.markdown("---")
 
 # --- VIEW 3: MONTHLY CALENDAR GRID ---
+def clean_activity_name(name):
+    """Replaces underscores with spaces and capitalizes each word."""
+    if not isinstance(name, str):
+        return "Other Activity"
+    return name.replace('_', ' ').title()
+
+# --- VIEW 3: MONTHLY CALENDAR GRID ---
 elif view_mode == "Monthly Calendar Grid":
     st.subheader("🗓️ Monthly Calendar Grid & Activity Slots")
     
@@ -219,17 +226,16 @@ elif view_mode == "Monthly Calendar Grid":
     else:
         df['Month_Year'] = df['Date'].dt.to_period('M')
         
-        # Generate all 12 months in chronological order based on available data range or standard year blocks
         min_date = df['Date'].min()
         max_date = df['Date'].max()
         all_months = pd.period_range(start=pd.Period(min_date, 'M'), end=pd.Period(max_date, 'M'), freq='M')
-        available_months = sorted(all_months, reverse=False) # In order
+        available_months = sorted(all_months, reverse=False)
         
         selected_month = st.selectbox(
             "Select Month", 
             available_months, 
             format_func=lambda x: x.strftime('%B %Y'),
-            index=len(available_months)-1 # Default to most recent month
+            index=len(available_months)-1
         )
         
         m_df = df[df['Month_Year'] == selected_month].copy()
@@ -258,56 +264,101 @@ elif view_mode == "Monthly Calendar Grid":
                         if day in daily_map:
                             for act in daily_map[day]:
                                 cat = act.get('Category', 'Other Activity')
-                                act_type = act.get('Activity Type', cat)
+                                raw_type = act.get('Activity Type', cat)
+                                act_type = clean_activity_name(raw_type)
                                 logo = sport_logos.get(cat, '🏅')
                                 dist = act.get('Distance_km', 0)
                                 hr = act.get('Avg_HR', 0)
                                 cals = act.get('Calories_kcal', 0)
                                 
-                                # Use Markdown tooltip title for hover popup details
-                                tooltip_text = f"Activity: {act_type} | Distance: {dist:.2f}km | Avg HR: {hr}bpm | Calories: {cals}kcal"
-                                st.markdown(f"<span title='{tooltip_text}' style='cursor:pointer;'>{logo} <b>{act_type}</b><br><small>{dist:.1f}km | {hr}bpm</small></span>", unsafe_allow_html=True)
+                                # Conditional metrics for distance vs non-distance sports
+                                if dist > 0.1:
+                                    metric_display = f"{dist:.1f}km | {hr:.0f}bpm"
+                                else:
+                                    metric_display = f"🔥 {cals:.0f}kcal | {hr:.0f}bpm"
+                                
+                                # Use Streamlit Popover for clean, stable click-to-view details
+                                with st.popover(f"{logo} {act_type}"):
+                                    st.markdown(f"**{act_type}**")
+                                    st.metric("Distance", f"{dist:.2f} km" if dist > 0.1 else "N/A (Non-Distance)")
+                                    st.metric("Avg Heart Rate", f"{hr:.1f} bpm")
+                                    st.metric("Calories Burned", f"{cals:.0f} kcal")
+                                    st.metric("Category", cat)
                         else:
                             st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
             st.markdown("---")
 
 # --- VIEW 2: WEEKLY CALENDAR LOG ---
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
 elif view_mode == "Weekly Calendar Log":
-    st.subheader("📅 Weekly Calendar Grid View")
+    st.subheader("📅 Weekly Calendar View & Activity Logs")
     
     if df.empty:
         st.warning("No data available.")
     else:
-        latest_date = df['Date'].max()
-        week_start = latest_date - timedelta(days=6)
-        week_days = pd.date_range(start=week_start, end=latest_date)
+        # Create week start identifier (Monday of each week)
+        df_w = df.copy()
+        df_w['Week_Start'] = df_w['Date'] - pd.to_timedelta(df_w['Date'].dt.dayofweek, unit='d')
+        df_w['Week_Start_Obj'] = df_w['Week_Start'].dt.date
         
-        df['DateOnly'] = df['Date'].dt.date
+        unique_weeks = sorted(df_w['Week_Start_Obj'].unique(), reverse=True)
         
-        st.markdown(f"### Week: {week_start.strftime('%b %d')} — {latest_date.strftime('%b %d, %Y')}")
+        selected_week_start = st.selectbox(
+            "Select Week",
+            unique_weeks,
+            format_func=lambda x: f"Week of {x.strftime('%B %d, %Y')}"
+        )
+        
+        week_df = df_w[df_w['Week_Start_Obj'] == selected_week_start].copy()
+        week_start_dt = pd.to_datetime(selected_week_start)
+        week_days = pd.date_range(start=week_start_dt, periods=7)
+        
+        week_df['DateOnly'] = week_df['Date'].dt.date
+        
+        st.markdown(f"### Week: {week_start_dt.strftime('%b %d')} — {(week_start_dt + timedelta(days=6)).strftime('%b %d, %Y')}")
         cols = st.columns(7)
+        weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         
         for i, single_date in enumerate(week_days):
             d_obj = single_date.date()
-            day_name = single_date.strftime('%a\n%b %d')
-            day_acts = df[df['DateOnly'] == d_obj]
+            day_acts = week_df[week_df['DateOnly'] == d_obj]
             
             with cols[i]:
-                st.markdown(f"**{day_name}**")
+                st.markdown(f"**{weekdays[i]}**<br><small>{single_date.strftime('%b %d')}</small>", unsafe_allow_html=True)
                 if not day_acts.empty:
                     for _, row in day_acts.iterrows():
                         cat = row.get('Category', 'Other Activity')
-                        act_type = row.get('Activity Type', cat)
+                        raw_type = row.get('Activity Type', cat)
+                        act_type = clean_activity_name(raw_type)
                         logo = sport_logos.get(cat, '🏅')
                         dist = row.get('Distance_km', 0)
                         hr = row.get('Avg_HR', 0)
                         cals = row.get('Calories_kcal', 0)
                         
-                        tooltip_text = f"Activity: {act_type} | Distance: {dist:.2f}km | Avg HR: {hr}bpm | Calories: {cals}kcal"
-                        st.markdown(f"<div title='{tooltip_text}' style='background:#1f2937; padding:6px; border-radius:6px; margin-bottom:4px; font-size:11px;'>{logo} <b>{act_type}</b><br>📏 {dist:.1f}km<br>❤️ {hr}bpm<br>🔥 {cals}kcal</div>", unsafe_allow_html=True)
+                        with st.popover(f"{logo} {act_type}"):
+                            st.markdown(f"**{act_type}**")
+                            st.metric("Distance", f"{dist:.2f} km" if dist > 0.1 else "N/A (Non-Distance)")
+                            st.metric("Avg Heart Rate", f"{hr:.1f} bpm")
+                            st.metric("Calories Burned", f"{cals:.0f} kcal")
+                            st.metric("Category", cat)
                 else:
-                    st.markdown("<div style='background:#111827; padding:10px; border-radius:6px; color:gray; text-align:center; font-size:11px;'>Rest Day</div>", unsafe_allow_html=True)
-
+                    st.markdown("<div style='background:#111827; padding:8px; border-radius:6px; color:gray; text-align:center; font-size:11px;'>Rest</div>", unsafe_allow_html=True)
+            
+        st.markdown("---")
+        st.markdown("#### 📋 Detailed Activity List for Selected Week")
+        if not week_df.empty:
+            display_week_df = week_df.sort_values(by='Date').copy()
+            display_week_df['Activity Type'] = display_week_df['Activity Type'].apply(clean_activity_name)
+            st.dataframe(
+                display_week_df[['Date', 'Activity Type', 'Distance_km', 'Avg_HR', 'Calories_kcal']].rename(
+                    columns={'Distance_km': 'Distance (km)', 'Avg_HR': 'Avg HR (bpm)', 'Calories_kcal': 'Calories'}
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No activities logged for this week.")
+            
 # --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights & Trends")
