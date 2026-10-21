@@ -95,26 +95,35 @@ df['Avg_HR'] = safe_numeric(df.get('averageHR', df.get('Avg HR', 0)))
 
 # --- 4. DASHBOARD UI COMPONENTS ---
 st.sidebar.header("Navigation")
-view_mode = st.sidebar.radio("Select View", ["Metrics Overview", "3-Month Heatmap", "Periodic Summaries", "AI Coach Analysis"])
+view_mode = st.sidebar.radio(
+    "Select View", 
+    [
+        "Training Dashboard (Overview & Heatmap)", 
+        "Last Week's Daily Log", 
+        "Per-Sport Insights", 
+        "AI Coach Analysis"
+    ]
+)
 
-if view_mode == "Metrics Overview":
-    st.subheader("Recent Training Metrics")
+# --- VIEW 1: UNIFIED TRAINING DASHBOARD (Overview, Heatmap & Monthly breakdown) ---
+if view_mode == "Training Dashboard (Overview & Heatmap)":
+    st.subheader("🚀 Training & Consistency Hub")
+    
+    # Top-level metrics
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Activities Logged", len(df))
     col2.metric("Total Distance", f"{df['Distance_km'].sum():.1f} km")
     col3.metric("Avg Training Heart Rate", f"{df['Avg_HR'].mean():.1f} bpm")
     
-    # --- Safe Data Cleaning for Plotly Scatter ---
+    st.markdown("---")
+    
+    # Interactive Plotly Chart (Metrics Overview)
+    st.markdown("### 📈 Activity Volume & Heart Rate Over Time")
     df_plot = df.copy()
-
-    # Fill NaN heart rate or distance with sensible defaults
     df_plot['Avg_HR'] = df_plot['Avg_HR'].fillna(0)
     df_plot['Distance_km'] = df_plot['Distance_km'].fillna(0.1)
-
-    # Ensure size is strictly positive (> 0) so Plotly can render the bubbles properly
     df_plot['Bubble_Size'] = df_plot['Distance_km'].apply(lambda x: max(float(x), 1.0))
 
-    # Interactive Plotly Chart
     fig = px.scatter(
         df_plot, 
         x='Date', 
@@ -122,73 +131,14 @@ if view_mode == "Metrics Overview":
         color='Category', 
         size='Bubble_Size',
         hover_data=['Activity Type', 'Distance_km', 'Calories_kcal'], 
-        title="Activity Heart Rate & Volume Over Time"
+        title=""
     )
     st.plotly_chart(fig, use_container_width=True)
-
-elif view_mode == "Periodic Summaries":
-    st.subheader("Periodic Training Aggregates")
     
-    if df.empty:
-        st.warning("No data available.")
-    else:
-        # Ensure Date is set as datetime index for resampling/period grouping
-        df_per = df.copy()
-        df_per['Date'] = pd.to_datetime(df_per['Date'])
-        
-        # Create period columns
-        df_per['Week_Period'] = df_per['Date'].dt.to_period('W').dt.start_time.dt.strftime('%Y-%m-%d')
-        df_per['Month_Period'] = df_per['Date'].dt.to_period('M').dt.strftime('%B %Y')
-        df_per['Quarter_Period'] = df_per['Date'].dt.to_period('Q').astype(str)
-        
-        period_tab = st.selectbox("Select Time Horizon", ["Weekly Summary", "Monthly Summary", "3-Month / Quarterly Summary"])
-        
-        if period_tab == "Weekly Summary":
-            st.markdown("### 📅 Weekly Breakdown")
-            group_col = 'Week_Period'
-            sort_order = False # Most recent first
-        elif period_tab == "Monthly Summary":
-            st.markdown("### 🗓️ Monthly Breakdown")
-            group_col = 'Month_Period'
-            sort_order = False
-        else:
-            st.markdown("### 📊 Quarterly (3-Month) Breakdown")
-            group_col = 'Quarter_Period'
-            sort_order = False
-
-        # Aggregate data safely
-        summary_df = df_per.groupby(group_col).agg(
-            Total_Activities=('Category', 'count'),
-            Total_Distance_km=('Distance_km', 'sum'),
-            Total_Calories=('Calories_kcal', 'sum'),
-            Avg_Heart_Rate=('Avg_HR', 'mean'),
-            Primary_Activity=('Category', lambda x: x.mode()[0] if not x.empty else 'Mixed')
-        ).reset_index()
-        
-        # Format numeric outputs for clean presentation
-        summary_df['Total_Distance_km'] = summary_df['Total_Distance_km'].round(2)
-        summary_df['Avg_Heart_Rate'] = summary_df['Avg_Heart_Rate'].round(1)
-        summary_df['Total_Calories'] = summary_df['Total_Calories'].round(0)
-        
-        summary_df = summary_df.sort_values(by=group_col, ascending=sort_order)
-        
-        # Display as a clean interactive dataframe table
-        st.dataframe(summary_df, use_container_width=True, hide_index=True)
-        
-        # Quick Static Metric Insights Cards based on the selection
-        st.markdown("---")
-        st.markdown("### 💡 Quick Deterministic Insights")
-        
-        max_row = summary_df.loc[summary_df['Total_Distance_km'].idxmax()] if not summary_df.empty else None
-        if max_row is not None:
-            st.info(f"🏆 **Peak Period:** Your highest distance period was **{max_row[group_col]}** with a total of **{max_row['Total_Distance_km']} km** across **{max_row['Total_Activities']} activities**.")
-            
-        avg_dist_period = summary_df['Total_Distance_km'].mean()
-        st.success(f"📈 **Consistency Baseline:** You average **{avg_dist_period:.1f} km** per {period_tab.split()[0].lower()} tracked.")
-
-elif view_mode == "3-Month Heatmap":
-    st.subheader("3-Month Activity Consistency Matrix")
+    st.markdown("---")
     
+    # 3-Month Consistency Heatmap
+    st.markdown("### 🗓️ 3-Month Consistency Heatmap")
     end_date = df['Date'].max() if not df.empty else datetime.now()
     start_date = end_date - timedelta(days=90)
     df_recent = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)].copy()
@@ -205,10 +155,12 @@ elif view_mode == "3-Month Heatmap":
     cal_df['WeekIdx'] = cal_df['Week'].map(week_map)
     cal_df['Visual_y'] = 6 - cal_df['Date'].dt.dayofweek
     
-    colors = {'Running': '#e74c3c', 'Cycling': '#3498db', 'Strength': '#9b59b6', 
-              'Walking': '#2ecc71', 'Water Sports': '#1abc9c', 'Racket Sports': '#f39c12', 'Other Activity': '#95a5a6'}
+    colors = {
+        'Running': '#e74c3c', 'Cycling': '#3498db', 'Strength': '#9b59b6', 
+        'Walking': '#2ecc71', 'Water Sports': '#1abc9c', 'Racket Sports': '#f39c12', 'Other Activity': '#95a5a6'
+    }
     
-    fig_hm, ax = plt.subplots(figsize=(14, 6), dpi=300)
+    fig_hm, ax = plt.subplots(figsize=(14, 4), dpi=300)
     for idx, row in cal_df.iterrows():
         wk_idx, y_pos = row['WeekIdx'], row['Visual_y']
         d = row['DateObj']
@@ -228,10 +180,89 @@ elif view_mode == "3-Month Heatmap":
     
     day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     for i, label in enumerate(day_labels):
-        ax.text(-1.5, 6 - i, label, ha='right', va='center', fontsize=11, fontweight='bold', color='#495057')
+        ax.text(-1.5, 6 - i, label, ha='right', va='center', fontsize=10, fontweight='bold', color='#495057')
         
     st.pyplot(fig_hm)
+    
+    st.markdown("---")
+    
+    # Monthly Breakdown with Expandable Activity Lists
+    st.markdown("### 📂 Monthly Breakdown & Activity Log")
+    df_m = df.copy()
+    df_m['Month_Year'] = df_m['Date'].dt.strftime('%B %Y')
+    months_list = df_m['Date'].dt.to_period('M').drop_duplicates().sort_values(ascending=False)
+    
+    for period in months_list:
+        m_str = period.strftime('%B %Y')
+        m_df = df_m[df_m['Date'].dt.to_period('M') == period].sort_values(by='Date', ascending=False)
+        
+        total_dist = m_df['Distance_km'].sum()
+        total_acts = len(m_df)
+        avg_hr_m = m_df['Avg_HR'].mean()
+        
+        with st.expander(f"🗓️ {m_str} — {total_acts} Activities | {total_dist:.1f} km Total | Avg HR: {avg_hr_m:.1f} bpm"):
+            st.dataframe(
+                m_df[['Date', 'Activity Type', 'Distance_km', 'Avg_HR', 'Calories_kcal']].rename(
+                    columns={'Distance_km': 'Distance (km)', 'Avg_HR': 'Avg HR (bpm)', 'Calories_kcal': 'Calories'}
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
 
+# --- VIEW 2: LAST WEEK'S DAILY LOG ---
+elif view_mode == "Last Week's Daily Log":
+    st.subheader("📅 Last Week's Daily Activity Log")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        latest_date = df['Date'].max()
+        week_ago = latest_date - timedelta(days=7)
+        last_week_df = df[(df['Date'] >= week_ago) & (df['Date'] <= latest_date)].sort_values(by='Date', ascending=False)
+        
+        if last_week_df.empty:
+            st.info("No activities logged in the last 7 days.")
+        else:
+            st.markdown(f"Showing daily activity breakdown from **{week_ago.strftime('%Y-%m-%d')}** to **{latest_date.strftime('%Y-%m-%d')}**:")
+            for idx, row in last_week_df.iterrows():
+                d_str = pd.to_datetime(row['Date']).strftime('%A, %b %d, %Y')
+                with st.container():
+                    st.markdown(f"#### 🔹 {d_str}: {row['Activity Type']}")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Distance", f"{row.get('Distance_km', 0):.2f} km")
+                    c2.metric("Avg HR", f"{row.get('Avg_HR', 0)} bpm")
+                    c3.metric("Calories", f"{row.get('Calories_kcal', 0)} kcal")
+                    c4.metric("Category", f"{row.get('Category', 'N/A')}")
+                    st.markdown("---")
+
+# --- VIEW 3: PER-SPORT INSIGHTS ---
+elif view_mode == "Per-Sport Insights":
+    st.subheader("🏆 Per-Sport Deterministic Insights")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        sports = df['Category'].unique()
+        selected_sport = st.selectbox("Select Sport Category", sports)
+        
+        sport_df = df[df['Category'] == selected_sport]
+        
+        st.markdown(f"### 📊 Analytics for: {selected_sport}")
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.metric("Total Sessions", len(sport_df))
+        sc2.metric("Total Distance", f"{sport_df['Distance_km'].sum():.1f} km")
+        sc3.metric("Average Session HR", f"{sport_df['Avg_HR'].mean():.1f} bpm")
+        
+        st.markdown("#### Key Per-Sport Observations:")
+        max_dist_row = sport_df.loc[sport_df['Distance_km'].idxmax()] if not sport_df.empty else None
+        if max_dist_row is not None:
+            st.info(f"🚀 **Longest {selected_sport} Session:** {max_dist_row['Distance_km']:.2f} km on {pd.to_datetime(max_dist_row['Date']).strftime('%b %d, %Y')} with an average HR of {max_dist_row['Avg_HR']} bpm.")
+            
+        max_hr_row = sport_df.loc[sport_df['Avg_HR'].idxmax()] if not sport_df.empty else None
+        if max_hr_row is not None:
+            st.success(f"🔥 **Highest Intensity {selected_sport} Session:** Averaged {max_hr_row['Avg_HR']} bpm on {pd.to_datetime(max_hr_row['Date']).strftime('%b %d, %Y')}.")
+
+# --- VIEW 4: AI COACH ANALYSIS ---
 elif view_mode == "AI Coach Analysis":
     st.subheader("Gemini AI Training Audit")
     if st.button("Generate Physiological Audit"):
@@ -254,7 +285,7 @@ elif view_mode == "AI Coach Analysis":
                 
                 try:
                     response = client_ai.models.generate_content(
-                        model='gemini-3.1-flash-lite',
+                        model='gemini-2.0-flash',
                         contents=prompt,
                     )
                     st.markdown(response.text)
