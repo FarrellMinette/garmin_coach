@@ -94,22 +94,32 @@ df['Calories_kcal'] = safe_numeric(df.get('calories', df.get('Calories', 0)))
 df['Avg_HR'] = safe_numeric(df.get('averageHR', df.get('Avg HR', 0)))
 
 # --- 4. DASHBOARD UI COMPONENTS ---
+# --- 4. DASHBOARD UI NAVIGATION ---
 st.sidebar.header("Navigation")
 view_mode = st.sidebar.radio(
     "Select View", 
     [
         "Training Dashboard (Overview & Heatmap)", 
-        "Last Week's Daily Log", 
+        "Weekly Calendar Log", 
+        "Monthly Calendar Grid", 
         "Per-Sport Insights", 
         "AI Coach Analysis"
     ]
 )
 
-# --- VIEW 1: UNIFIED TRAINING DASHBOARD (Overview, Heatmap & Monthly breakdown) ---
+sport_colors = {
+    'Running': '#e74c3c', 'Cycling': '#3498db', 'Strength': '#9b59b6', 
+    'Walking': '#2ecc71', 'Water Sports': '#1abc9c', 'Racket Sports': '#f39c12', 'Other Activity': '#95a5a6'
+}
+sport_logos = {
+    'Running': '🏃‍♂️', 'Cycling': '🚴‍♂️', 'Strength': '🏋️‍♂️', 'Walking': '🚶‍♂️', 
+    'Water Sports': '🏊‍♂️', 'Racket Sports': '🎾', 'Other Activity': '🏅'
+}
+
+# --- VIEW 1: UNIFIED TRAINING DASHBOARD ---
 if view_mode == "Training Dashboard (Overview & Heatmap)":
     st.subheader("🚀 Training & Consistency Hub")
     
-    # Top-level metrics
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Activities Logged", len(df))
     col2.metric("Total Distance", f"{df['Distance_km'].sum():.1f} km")
@@ -117,7 +127,7 @@ if view_mode == "Training Dashboard (Overview & Heatmap)":
     
     st.markdown("---")
     
-    # 3-Month Consistency Heatmap
+    # 3-Month Consistency Heatmap styled with dark background matching Plotly charts
     st.markdown("### 🗓️ 3-Month Consistency Heatmap")
     end_date = df['Date'].max() if not df.empty else datetime.now()
     start_date = end_date - timedelta(days=90)
@@ -135,23 +145,21 @@ if view_mode == "Training Dashboard (Overview & Heatmap)":
     cal_df['WeekIdx'] = cal_df['Week'].map(week_map)
     cal_df['Visual_y'] = 6 - cal_df['Date'].dt.dayofweek
     
-    colors = {
-        'Running': '#e74c3c', 'Cycling': '#3498db', 'Strength': '#9b59b6', 
-        'Walking': '#2ecc71', 'Water Sports': '#1abc9c', 'Racket Sports': '#f39c12', 'Other Activity': '#95a5a6'
-    }
+    fig_hm, ax = plt.subplots(figsize=(14, 4.5), dpi=300)
+    fig_hm.patch.set_facecolor('#0e1117')
+    ax.set_facecolor('#0e1117')
     
-    fig_hm, ax = plt.subplots(figsize=(14, 4), dpi=300)
     for idx, row in cal_df.iterrows():
         wk_idx, y_pos = row['WeekIdx'], row['Visual_y']
         d = row['DateObj']
-        ax.add_patch(patches.Circle((wk_idx, y_pos), 0.4, facecolor='#f8f9fa', edgecolor='#e9ecef', linewidth=0.5, zorder=1))
+        ax.add_patch(patches.Circle((wk_idx, y_pos), 0.4, facecolor='#262730', edgecolor='#363842', linewidth=0.5, zorder=1))
         if d in daily_activities:
             acts = daily_activities[d]
             if len(acts) == 1:
-                ax.add_patch(patches.Circle((wk_idx, y_pos), 0.38, facecolor=colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
+                ax.add_patch(patches.Circle((wk_idx, y_pos), 0.38, facecolor=sport_colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
             elif len(acts) >= 2:
-                ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 90, 270, facecolor=colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
-                ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 270, 90, facecolor=colors.get(acts[1], '#e74c3c'), edgecolor='none', zorder=2))
+                ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 90, 270, facecolor=sport_colors.get(acts[0], '#333333'), edgecolor='none', zorder=2))
+                ax.add_patch(patches.Wedge((wk_idx, y_pos), 0.38, 270, 90, facecolor=sport_colors.get(acts[1], '#e74c3c'), edgecolor='none', zorder=2))
 
     ax.set_xlim(-0.8, cal_df['WeekIdx'].max() + 0.8)
     ax.set_ylim(-1.0, 7.0)
@@ -160,76 +168,94 @@ if view_mode == "Training Dashboard (Overview & Heatmap)":
     
     day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     for i, label in enumerate(day_labels):
-        ax.text(-1.5, 6 - i, label, ha='right', va='center', fontsize=10, fontweight='bold', color='#495057')
+        ax.text(-1.5, 6 - i, label, ha='right', va='center', fontsize=10, fontweight='bold', color='#fafafa')
         
+    # Add Legend to Heatmap
+    legend_elements = [patches.Patch(facecolor=color, label=sport) for sport, color in sport_colors.items()]
+    ax.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=4, facecolor='#262730', edgecolor='none', labelcolor='white')
+    
     st.pyplot(fig_hm)
-    
-    st.markdown("---")
-    
-    # Monthly Breakdown with Expandable Activity Lists
-    st.markdown("### 📂 Monthly Breakdown & Activity Log")
-    df_m = df.copy()
-    df_m['Month_Year'] = df_m['Date'].dt.strftime('%B %Y')
-    months_list = df_m['Date'].dt.to_period('M').drop_duplicates().sort_values(ascending=False)
-    
-    for period in months_list:
-        m_str = period.strftime('%B %Y')
-        m_df = df_m[df_m['Date'].dt.to_period('M') == period].sort_values(by='Date', ascending=False)
-        
-        total_dist = m_df['Distance_km'].sum()
-        total_acts = len(m_df)
-        avg_hr_m = m_df['Avg_HR'].mean()
-        
-        with st.expander(f"🗓️ {m_str} — {total_acts} Activities | {total_dist:.1f} km Total | Avg HR: {avg_hr_m:.1f} bpm"):
-            st.dataframe(
-                m_df[['Date', 'Activity Type', 'Distance_km', 'Avg_HR', 'Calories_kcal']].rename(
-                    columns={'Distance_km': 'Distance (km)', 'Avg_HR': 'Avg HR (bpm)', 'Calories_kcal': 'Calories'}
-                ),
-                use_container_width=True,
-                hide_index=True
-            )
 
-# --- VIEW 2: LAST WEEK'S DAILY LOG ---
-elif view_mode == "Last Week's Daily Log":
-    st.subheader("📅 Last Week's Daily Activity Log")
+# --- VIEW 2: WEEKLY CALENDAR LOG ---
+elif view_mode == "Weekly Calendar Log":
+    st.subheader("📅 Weekly Calendar View (Last 7 Days)")
     
     if df.empty:
         st.warning("No data available.")
     else:
         latest_date = df['Date'].max()
-        week_ago = latest_date - timedelta(days=7)
-        last_week_df = df[(df['Date'] >= week_ago) & (df['Date'] <= latest_date)].sort_values(by='Date', ascending=False)
+        week_start = latest_date - timedelta(days=6)
+        week_days = pd.date_range(start=week_start, end=latest_date)
         
-        if last_week_df.empty:
-            st.info("No activities logged in the last 7 days.")
-        else:
-            # Sport logo/emoji mapper dictionary
-            sport_logos = {
-                'Running': '🏃‍♂️',
-                'Cycling': '🚴‍♂️',
-                'Strength': '🏋️‍♂️',
-                'Walking': '🚶‍♂️',
-                'Water Sports': '🏊‍♂️',
-                'Racket Sports': '🎾',
-                'Other Activity': '🏅'
-            }
+        df['DateOnly'] = df['Date'].dt.date
+        
+        for single_date in week_days:
+            d_obj = single_date.date()
+            day_name = single_date.strftime('%A, %b %d, %Y')
+            day_acts = df[df['DateOnly'] == d_obj]
             
-            st.markdown(f"Showing daily activity breakdown from **{week_ago.strftime('%Y-%m-%d')}** to **{latest_date.strftime('%Y-%m-%d')}**:")
-            for idx, row in last_week_df.iterrows():
-                d_str = pd.to_datetime(row['Date']).strftime('%A, %b %d, %Y')
-                category = row.get('Category', 'Other Activity')
-                logo = sport_logos.get(category, '🏅')
-                
-                with st.container():
-                    st.markdown(f"#### {logo} {d_str}: {row['Activity Type']}")
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Distance", f"{row.get('Distance_km', 0):.2f} km")
-                    c2.metric("Avg HR", f"{row.get('Avg_HR', 0)} bpm")
-                    c3.metric("Calories", f"{row.get('Calories_kcal', 0)} kcal")
-                    c4.metric("Sport", f"{logo} {category}")
-                    st.markdown("---")
+            with st.container():
+                if not day_acts.empty:
+                    st.markdown(f"#### 🟢 {day_name} (Active)")
+                    for _, row in day_acts.iterrows():
+                        cat = row.get('Category', 'Other Activity')
+                        logo = sport_logos.get(cat, '🏅')
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        col1.markdown(f"**{logo} {row.get('ActivityType', row.get('Activity Type', cat))}**")
+                        col2.metric("Distance", f"{row.get('Distance_km', 0):.2f} km")
+                        col3.metric("Avg HR", f"{row.get('Avg_HR', 0)} bpm")
+                        col4.metric("Calories", f"{row.get('Calories_kcal', 0)} kcal")
+                        col5.metric("Training Load", cat)
+                else:
+                    st.markdown(f"#### ⚪ {day_name} — *Rest Day / No Activity*")
+                st.markdown("---")
 
-# --- VIEW 3: PER-SPORT INSIGHTS ---
+# --- VIEW 3: MONTHLY CALENDAR GRID ---
+elif view_mode == "Monthly Calendar Grid":
+    st.subheader("🗓️ Monthly Calendar Grid & Activity Slots")
+    
+    if df.empty:
+        st.warning("No data available.")
+    else:
+        df['Month_Year'] = df['Date'].dt.to_period('M')
+        available_months = sorted(df['Month_Year'].unique(), reverse=True)
+        selected_month = st.selectbox("Select Month", available_months, format_func=lambda x: x.strftime('%B %Y'))
+        
+        m_df = df[df['Month_Year'] == selected_month].copy()
+        m_df['DayNum'] = m_df['Date'].dt.day
+        daily_map = m_df.groupby('DayNum').apply(lambda x: x.to_dict('records')).to_dict()
+        
+        year = selected_month.year
+        month = selected_month.month
+        import calendar
+        cal_matrix = calendar.monthcalendar(year, month)
+        
+        st.markdown(f"### {selected_month.strftime('%B %Y')} Calendar")
+        cols = st.columns(7)
+        weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        for i, day_name in enumerate(weekdays):
+            cols[i].markdown(f"**{day_name}**")
+            
+        for week in cal_matrix:
+            cols = st.columns(7)
+            for i, day in enumerate(week):
+                if day == 0:
+                    cols[i].markdown("")
+                else:
+                    with cols[i]:
+                        st.markdown(f"**{day}**")
+                        if day in daily_map:
+                            for act in daily_map[day]:
+                                cat = act.get('Category', 'Other Activity')
+                                logo = sport_logos.get(cat, '🏅')
+                                dist = act.get('Distance_km', 0)
+                                hr = act.get('Avg_HR', 0)
+                                st.markdown(f"<small>{logo} **{dist:.1f}km**<br>HR: {hr}bpm</small>", unsafe_allow_html=True)
+                        else:
+                            st.markdown("<small style='color:grey;'>Rest</small>", unsafe_allow_html=True)
+            st.markdown("---")
+
+# --- VIEW 4: PER-SPORT INSIGHTS ---
 elif view_mode == "Per-Sport Insights":
     st.subheader("🏆 Per-Sport Deterministic Insights")
     
@@ -240,8 +266,9 @@ elif view_mode == "Per-Sport Insights":
         selected_sport = st.selectbox("Select Sport Category", sports)
         
         sport_df = df[df['Category'] == selected_sport]
+        logo = sport_logos.get(selected_sport, '🏅')
         
-        st.markdown(f"### 📊 Analytics for: {selected_sport}")
+        st.markdown(f"### {logo} Analytics for: {selected_sport}")
         sc1, sc2, sc3 = st.columns(3)
         sc1.metric("Total Sessions", len(sport_df))
         sc2.metric("Total Distance", f"{sport_df['Distance_km'].sum():.1f} km")
@@ -256,7 +283,7 @@ elif view_mode == "Per-Sport Insights":
         if max_hr_row is not None:
             st.success(f"🔥 **Highest Intensity {selected_sport} Session:** Averaged {max_hr_row['Avg_HR']} bpm on {pd.to_datetime(max_hr_row['Date']).strftime('%b %d, %Y')}.")
 
-# --- VIEW 4: AI COACH ANALYSIS ---
+# --- VIEW 5: AI COACH ANALYSIS ---
 elif view_mode == "AI Coach Analysis":
     st.subheader("Gemini AI Training Audit")
     if st.button("Generate Physiological Audit"):
