@@ -104,9 +104,26 @@ if view_mode == "Metrics Overview":
     col2.metric("Total Distance", f"{df['Distance_km'].sum():.1f} km")
     col3.metric("Avg Training Heart Rate", f"{df['Avg_HR'].mean():.1f} bpm")
     
+    # --- Safe Data Cleaning for Plotly Scatter ---
+    df_plot = df.copy()
+
+    # Fill NaN heart rate or distance with sensible defaults
+    df_plot['Avg_HR'] = df_plot['Avg_HR'].fillna(0)
+    df_plot['Distance_km'] = df_plot['Distance_km'].fillna(0.1)
+
+    # Ensure size is strictly positive (> 0) so Plotly can render the bubbles properly
+    df_plot['Bubble_Size'] = df_plot['Distance_km'].apply(lambda x: max(float(x), 1.0))
+
     # Interactive Plotly Chart
-    fig = px.scatter(df, x='Date', y='Avg_HR', color='Category', size='Distance_km',
-                     hover_data=['Activity Type', 'Calories_kcal'], title="Activity Heart Rate & Volume Over Time")
+    fig = px.scatter(
+        df_plot, 
+        x='Date', 
+        y='Avg_HR', 
+        color='Category', 
+        size='Bubble_Size',
+        hover_data=['Activity Type', 'Distance_km', 'Calories_kcal'], 
+        title="Activity Heart Rate & Volume Over Time"
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 elif view_mode == "3-Month Heatmap":
