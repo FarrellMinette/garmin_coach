@@ -5,3 +5,4 @@ plotly
 matplotlib
 garminconnect
 google-genai
+openai
