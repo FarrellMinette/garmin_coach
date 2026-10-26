@@ -8,6 +8,7 @@ import matplotlib.patches as patches
 from datetime import datetime, timedelta
 from garminconnect import Garmin
 from google import genai
+from openai import OpenAI
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
@@ -100,7 +101,6 @@ df['Distance_km'] = safe_numeric(df.get('distance', df.get('Distance', 0))) / 10
 df['Calories_kcal'] = safe_numeric(df.get('calories', df.get('Calories', 0)))
 df['Avg_HR'] = safe_numeric(df.get('averageHR', df.get('Avg HR', 0)))
 
-# --- 4. DASHBOARD UI COMPONENTS ---
 # --- 4. DASHBOARD UI NAVIGATION ---
 st.sidebar.header("Navigation")
 view_mode = st.sidebar.radio(
@@ -501,32 +501,109 @@ elif view_mode == "Per-Sport Insights":
             hide_index=True
         )
 
-# --- VIEW 5: AI COACH ANALYSIS ---
+
+# --- VIEW 5: CONVERSATIONAL AI COACH (Hugging Face Multi-Model Fallback) ---
 elif view_mode == "AI Coach Analysis":
-    st.subheader("Gemini AI Training Audit")
-    if st.button("Generate Physiological Audit"):
-        if df.empty:
-            st.warning("No activity data available to analyze.")
-        else:
-            with st.spinner("Analyzing your Garmin training load and heart rate zones..."):
-                client_ai = genai.Client(api_key=GEMINI_KEY)
-                summary_stats = df[['Activity Type', 'Distance_km', 'Calories_kcal', 'Avg_HR']].head(20).to_string()
-                prompt = f"""
-                You are a rigorous sports scientist and exercise physiologist. Review these recent Garmin activities:
-                {summary_stats}
-                
-                Provide a precise, scientifically accurate audit of:
-                1. Training intensity distribution (polarization / high HR vs Zone 2 balance).
-                2. Cardiovascular strain and recovery implications.
-                3. Two actionable, specific workouts to improve efficiency this week.
-                Keep it structured, punchy, and evidence-based.
-                """
-                
-                try:
-                    response = client_ai.models.generate_content(
-                        model='gemini-3.8-flash',
-                        contents=prompt,
+    st.subheader("🤖 Conversational Garmin AI Coach (HF Powered)")
+    st.markdown("Chat directly with your AI coach to audit your training load, analyze heart rate zones, and get custom workout advice.")
+
+    # Retrieve HF Token safely from secrets
+    hf_token = st.secrets.get("HF_TOKEN")
+    if not hf_token:
+        st.error("Missing `HF_TOKEN` in `.streamlit/secrets.toml`. Please add your Hugging Face API key to proceed.")
+        st.stop()
+
+    if df.empty:
+        st.warning("No activity data available to analyze.")
+    else:
+        # Priority list of small, fast, highly effective fitness & chat models
+        RECOMMENDED_MODELS = [
+            "meta-llama/Llama-3.1-8B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct",
+            "mistralai/Mistral-7B-Instruct-v0.3",
+            "meta-llama/Llama-3.3-70B-Instruct"
+        ]
+
+        # 1. Initialize chat history in session state
+        if "messages" not in st.session_state:
+            st.session_state.messages = [
+                {
+                    "role": "assistant", 
+                    "content": "Hello! I've loaded your recent Garmin data. Ask me anything about your training consistency, heart rate trends, or how to structure your upcoming week."
+                }
+            ]
+
+        # 2. Render previous chat messages
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        # 3. Capture user chat input
+        if prompt := st.chat_input("Ask your AI coach (e.g., 'How was my Zone 2 balance last week?' or 'Give me a recovery workout')..."):
+            # Append user message to state and display it
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            # 4. Generate AI response with token-optimized context and multi-model fallback
+            with st.chat_message("assistant"):
+                with st.spinner("Analyzing Garmin data & consulting AI Coach..."):
+                    
+                    # TOKEN OPTIMIZATION: Send clean statistical metrics + 15 latest sessions
+                    summary_stats = df[['Date', 'Activity Type', 'Distance_km', 'Calories_kcal', 'Avg_HR']].head(15).to_string()
+                    total_dist = df['Distance_km'].sum()
+                    total_acts = len(df)
+                    mean_hr = df['Avg_HR'].mean()
+                    
+                    system_instruction = f"""
+                    You are an elite, rigorous sports scientist and exercise physiologist acting as a personal Garmin AI coach.
+                    Athlete overall metrics:
+                    - Total activities: {total_acts}
+                    - Total distance: {total_dist:.1f} km
+                    - Average training heart rate: {mean_hr:.1f} bpm
+                    
+                    Recent 15 activity log:
+                    {summary_stats}
+                    
+                    Instructions:
+                    - Answer the athlete's questions concisely, scientifically, and actionably.
+                    - Maintain context from the ongoing conversation history.
+                    - Reference their actual numbers when relevant.
+                    """
+
+                    # Build OpenAI-formatted messages array with system context + chat history
+                    formatted_messages = [{"role": "system", "content": system_instruction}]
+                    for msg in st.session_state.messages:
+                        formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+                    # Initialize OpenAI client pointing to Hugging Face router
+                    client = OpenAI(
+                        base_url="https://router.huggingface.co/v1",
+                        api_key=hf_token
                     )
-                    st.markdown(response.text)
-                except Exception as e:
-                    st.error(f"API Error: {e}")
+
+                    ai_reply = None
+                    used_model = None
+
+                    # Iterate over models until one succeeds
+                    for model_id in RECOMMENDED_MODELS:
+                        try:
+                            response = client.chat.completions.create(
+                                model=model_id,
+                                messages=formatted_messages,
+                                max_tokens=600,
+                                temperature=0.7
+                            )
+                            ai_reply = response.choices[0].message.content
+                            used_model = model_id
+                            break  # Exit loop on successful execution
+                        except Exception as e:
+                            # Log/continue to next model silently if unavailable
+                            continue
+
+                    if ai_reply:
+                        st.markdown(ai_reply)
+                        st.caption(f"⚡ Powered by `{used_model}` via Hugging Face")
+                        st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+                    else:
+                        st.error("All fallback models are currently busy or unavailable. Please try again in a few moments.")
